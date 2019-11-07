@@ -1,1 +1,4 @@
 # pubsub
+```
+docker-compose up
+```
