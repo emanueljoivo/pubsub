@@ -1,3 +1,8 @@
+### Running
+```
+docker-compose up
+```
+
 ### Architecture Overview
 <br />  
 <p align="center">  

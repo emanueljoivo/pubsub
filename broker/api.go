@@ -10,6 +10,8 @@ import (
 	"github.com/gorilla/mux"
 )
 
+const SentinelAdress string = "localhost:5002"
+
 type TopicMessage struct {
 	Topic string
 	Message string
@@ -63,10 +65,11 @@ func sub(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	time.Sleep(5*time.Second)
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/pub", pub)
 	router.HandleFunc("/sub", sub)
 
-	log.Fatal(http.ListenAndServe(":8080", router))
+	log.Fatal(http.ListenAndServe(":8000", router))
 }
 
