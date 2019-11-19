@@ -1,16 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"encoding/json"
 	"time"
 
 	"github.com/gorilla/mux"
 )
 
-const SentinelAdress string = "localhost:5002"
+const SentinelAddress string = "localhost:5002"
 
 type TopicMessage struct {
 	Topic string
