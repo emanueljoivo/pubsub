@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
@@ -8,27 +9,35 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
 	"time"
-
-	"github.com/gorilla/mux"
 )
 
-const SentinelAddress string = "localhost:5002"
+const (
+	SentinelAddress = "localhost:5002"
+	PublisherPort = "8000"
+	SubscriberPort = "9000"
+	NetworkType   = "tcp"
+)
 
 var (
 	RequestError = errors.New("request could not be completed")
+	ConnectionErr = errors.New("connection error")
+	UnmarshalErr  = errors.New("unmarshal error")
 )
 
 type TopicMessage struct {
-	Topic string
-	Message string
+	Topic     string
+	Message   string
 	CreatedAt time.Time
 }
 
 type TopicRequest struct {
-	Topic string
+	Topic  string
 	Offset int
 }
 
@@ -57,7 +66,6 @@ func dispatchMsg(topic TopicMessage) {
 	fmt.Println("response Body:", string(body))
 }
 
-
 func pub(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("hey, this is pub")
 	message := TopicMessage{}
@@ -70,14 +78,14 @@ func pub(w http.ResponseWriter, r *http.Request) {
 	message.CreatedAt = time.Now().Local()
 
 	messageJson, err := json.Marshal(message)
-	if err != nil{
+	if err != nil {
 		log.Println(RequestError)
 	}
 
-	w.Header().Set("Content-Type","application/json")
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(messageJson)
-	
+
 }
 
 func sub(w http.ResponseWriter, r *http.Request) {
@@ -90,21 +98,98 @@ func sub(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestJson, err := json.Marshal(request)
-	if err != nil{
+	if err != nil {
 		log.Println(RequestError)
 	}
 
-	w.Header().Set("Content-Type","application/json")
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(requestJson)
 }
 
-func main() {
-	time.Sleep(5*time.Second)
-	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/pub", pub)
-	router.HandleFunc("/sub", sub)
+func handlePub(c net.Conn, cMsg chan TopicMessage) {
+	for {
+		message, err := bufio.NewReader(c).ReadBytes('\n')
+		if err != nil {
+			log.Fatalln(ConnectionErr)
+		}
 
-	log.Fatal(http.ListenAndServe(":8000", router))
+		var msg TopicMessage
+		err = json.Unmarshal(message, &msg)
+
+		if err != nil {
+			log.Println(UnmarshalErr)
+		}
+		// maybe select across various channels
+		cMsg <- msg
+	}
 }
 
+func handleSub(c net.Conn, cMsg chan TopicMessage) {
+	for {
+		// maybe select across various channels
+		message := <- cMsg
+
+		e, err := json.Marshal(message)
+
+		if err != nil {
+			log.Println(ConnectionErr)
+		}
+
+		_, err = c.Write(append(e, '\n'))
+
+		if err != nil {
+			log.Fatalln(ConnectionErr)
+		}
+	}
+}
+
+func main() {
+	messages := make(chan TopicMessage)
+
+	// pub
+	go func(cMsg chan TopicMessage) {
+		log.Println("Initializing pub broker")
+		l, err := net.Listen(NetworkType, ":"+PublisherPort)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		defer l.Close()
+
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				log.Fatalln(err)
+				return
+			}
+			go handlePub(c, cMsg)
+		}
+	} (messages)
+
+	// sub
+	go func(cMsg chan TopicMessage) {
+		log.Println("Initializing pub broker")
+		l, err := net.Listen(NetworkType, ":"+PublisherPort)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		defer l.Close()
+
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				log.Fatalln(err)
+				return
+			}
+			go handleSub(c, cMsg)
+		}
+	} (messages)
+
+	c := make(chan os.Signal, 1)
+
+	signal.Notify(c, os.Interrupt)
+
+	<-c
+}

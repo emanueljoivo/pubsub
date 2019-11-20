@@ -1,16 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 	// "time"
 	"os"
-	"encoding/json"
-	"crypto/sha256"
-	"bytes"
 	"time"
-	"github.com/gorilla/mux"
 )
 
 const nTopics int = 3
@@ -21,22 +21,22 @@ var sentinelPort string
 
 func setupVariables() {
 	port = os.Getenv("PORT")
-	if (port == "") { 
+	if port == "" {
 	port = "8003"
 }
 	sentinelPort = os.Getenv("SENTINEL")
 	fmt.Println(sentinelPort)
-	if (sentinelPort == "") { //This dont work, i dont know why
+	if sentinelPort == "" { //This dont work, i dont know why
 		sentinelPort = "8002"
 	}
 }
 func computeHashKeyForList(list [5]string) string {
 	var buffer bytes.Buffer
-	for i, _ := range list {
+	for i := range list {
 		buffer.WriteString(list[i])
 	}
 	hash := sha256.Sum256([]byte(buffer.String()))
-	hashString := string(hash[:len(hash)])
+	hashString := string(hash[:])
 	return hashString
 }
 
@@ -79,18 +79,18 @@ func getTopic(topicName string) (int, Topic) {
 	index := -1
 	var topic Topic
 	for i , storageTopic := range storage.Topics {
-		if (storageTopic.Title == topicName) {
+		if storageTopic.Title == topicName {
 			topic = storageTopic
 			fmt.Println("HEY U ALREADY HAVE ONE")
 			index = i
 		}
 	}
-	if (index == -1) {
+	if index == -1 {
 		topic.Title = topicName
 		index = storage.nTopics
 		storage.nTopics++
 	}
-	if (index >= nTopics) {
+	if index >= nTopics {
 		index = -1
 	}
 	return index,topic
@@ -106,7 +106,7 @@ func store(w http.ResponseWriter, r *http.Request) {
 	topicName := topicMessage.Topic
 	index,topic := getTopic(topicName)
 	
-	if (index == -1) {
+	if index == -1 {
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprintf(w,"sorry, we cant create more topics ")
 		return
