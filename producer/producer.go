@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strconv"
 	"time"
 )
 
@@ -42,7 +41,7 @@ func generateString(length int) string {
 	return stringWithCharset(length, charset)
 }
 
-func handleConnection(c net.Conn, topic string) {
+func produce(c net.Conn, topic string) {
 	for {
 		message := &TopicMessage{
 			Topic:   topic,
@@ -55,9 +54,7 @@ func handleConnection(c net.Conn, topic string) {
 			log.Println(ConnectionErr)
 		}
 
-		bytesWrited, err = c.Write(append(e, '\n'))
-
-		log.Println("Bytes written ")
+		_, err = c.Write(append(e, '\n'))
 
 		if err != nil {
 			log.Fatalln(ConnectionErr)
@@ -67,7 +64,7 @@ func handleConnection(c net.Conn, topic string) {
 	}
 }
 
-func NewProducer(nTopics int) {
+func NewProducer() {
 	conn, err := net.Dial(NetworkType, ":"+PubPort)
 
 	for err != nil {
@@ -81,23 +78,17 @@ func NewProducer(nTopics int) {
 	log.Println("Initializing producer on port :" + PubPort)
 
 	rand.Seed(time.Now().Unix())
-	for i := 0; i < nTopics; i++ {
-		go handleConnection(conn, "topic_" + strconv.Itoa(i))
-	}
+	produce(conn, "topic")
 }
 
 func main() {
-	var nProducers = 1
-	var nTopics = 1
-
-	for i := 0; i < nProducers; i++ {
-		go NewProducer(nTopics)
-	}
+	go NewProducer()
+	go NewProducer()
+	go NewProducer()
 
 	c := make(chan os.Signal, 1)
 
 	signal.Notify(c, os.Interrupt)
 
 	<-c
-
 }

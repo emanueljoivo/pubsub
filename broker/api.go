@@ -107,9 +107,30 @@ func sub(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(requestJson)
 }
 
+func handleSub(c net.Conn, cMsg chan TopicMessage) {
+	for {
+		// maybe select across various channels based on the topic?
+		message := <- cMsg
+
+		e, err := json.Marshal(message)
+
+		if err != nil {
+			log.Println(ConnectionErr.Error() + "from sub")
+		}
+
+		_, err = c.Write(append(e, '\n'))
+		log.Printf("Msg %s dequeued \n", message.Message)
+
+		if err != nil {
+			log.Fatalln(ConnectionErr.Error() + "from sub")
+		}
+	}
+}
+
 func handlePub(c net.Conn, cMsg chan TopicMessage) {
 	for {
 		message, err := bufio.NewReader(c).ReadBytes('\n')
+
 		if err != nil {
 			log.Fatalln(ConnectionErr.Error() + " from pub")
 		}
@@ -126,28 +147,9 @@ func handlePub(c net.Conn, cMsg chan TopicMessage) {
 	}
 }
 
-func handleSub(c net.Conn, cMsg chan TopicMessage) {
-	for {
-		// maybe select across various channels based on the topic?
-		message := <- cMsg
-
-		e, err := json.Marshal(message)
-
-		if err != nil {
-			log.Println(ConnectionErr.Error() + "from sub")
-		}
-
-		status, err := c.Write(append(e, '\n'))
-		log.Printf("Msg %s dequeued with status %d\n", message.Message, status)
-
-		if err != nil {
-			log.Fatalln(ConnectionErr.Error() + "from sub")
-		}
-	}
-}
-
 func main() {
-	messages := make(chan TopicMessage)
+	// the channel should be buffered
+	messages := make(chan TopicMessage, 100)
 
 	// pub
 	go func(cMsg chan TopicMessage) {
