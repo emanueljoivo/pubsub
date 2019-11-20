@@ -14,18 +14,18 @@ const nReplicas int = 2
 var sentinel Sentinel
 
 type TopicMeta struct {
-	Title string
-	StorageAdress [nReplicas]string
-	StorageNumber int
-	LastMessageAt int
-	MessagesHash string
+	Title          string
+	StorageAddress [nReplicas]string
+	StorageNumber  int
+	LastMessageAt  int
+	MessagesHash   string
 }
 
 type StorageMeta struct {
 	TopicsNumber int
-	Adress string
-	Topics [nTopics]string
-	Status bool
+	Address      string
+	Topics       [nTopics]string
+	Status       bool
 }
 
 type Sentinel struct {
@@ -46,7 +46,7 @@ func newStorage(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("HEYY " + port)
 
 	storage := StorageMeta{}
-	storage.Adress = port
+	storage.Address = port
 	storage.Status = true
 	storage.TopicsNumber = 0
 	sentinel.Storages[port] = storage
