@@ -111,35 +111,37 @@ func handlePub(c net.Conn, cMsg chan TopicMessage) {
 	for {
 		message, err := bufio.NewReader(c).ReadBytes('\n')
 		if err != nil {
-			log.Fatalln(ConnectionErr)
+			log.Fatalln(ConnectionErr.Error() + " from pub")
 		}
 
 		var msg TopicMessage
 		err = json.Unmarshal(message, &msg)
 
 		if err != nil {
-			log.Println(UnmarshalErr)
+			log.Println(UnmarshalErr.Error() + "from pub")
 		}
-		// maybe select across various channels
+		// maybe select across various channels based on the topic?
+		log.Printf("Msg %s enqueued\n", msg.Message)
 		cMsg <- msg
 	}
 }
 
 func handleSub(c net.Conn, cMsg chan TopicMessage) {
 	for {
-		// maybe select across various channels
+		// maybe select across various channels based on the topic?
 		message := <- cMsg
 
 		e, err := json.Marshal(message)
 
 		if err != nil {
-			log.Println(ConnectionErr)
+			log.Println(ConnectionErr.Error() + "from sub")
 		}
 
-		_, err = c.Write(append(e, '\n'))
+		status, err := c.Write(append(e, '\n'))
+		log.Printf("Msg %s dequeued with status %d\n", message.Message, status)
 
 		if err != nil {
-			log.Fatalln(ConnectionErr)
+			log.Fatalln(ConnectionErr.Error() + "from sub")
 		}
 	}
 }
@@ -169,8 +171,8 @@ func main() {
 
 	// sub
 	go func(cMsg chan TopicMessage) {
-		log.Println("Initializing pub broker")
-		l, err := net.Listen(NetworkType, ":"+PublisherPort)
+		log.Println("Initializing sub broker")
+		l, err := net.Listen(NetworkType, ":"+SubscriberPort)
 		if err != nil {
 			log.Println(err)
 			return
@@ -187,9 +189,9 @@ func main() {
 		}
 	} (messages)
 
-	c := make(chan os.Signal, 1)
+	cJoin := make(chan os.Signal, 1)
 
-	signal.Notify(c, os.Interrupt)
+	signal.Notify(cJoin, os.Interrupt)
 
-	<-c
+	<-cJoin
 }

@@ -6,6 +6,10 @@ import (
 	"errors"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"strconv"
+	"time"
 )
 
 const (
@@ -16,6 +20,8 @@ const (
 var (
 	ConnectionErr = errors.New("connection error")
 	UnmarshalErr  = errors.New("unmarshal error")
+	ConsumersErr = errors.New("you need to specify how many consumers will perform")
+	ArgsErr = errors.New("args error")
 )
 
 type TopicMessage struct {
@@ -41,20 +47,42 @@ func handleConnection(c net.Conn, topic string) {
 	}
 }
 
-func main() {
-	l, err := net.Listen(NetworkType, ":"+SubPort)
-	for err != nil {
-		log.Println("waiting connection with broker")
-	}
-	log.Println("Initializing consumers on port " + SubPort)
-	defer l.Close()
+func consume(nTopics int) {
+	conn, err := net.Dial(NetworkType, ":"+SubPort)
 
-	for {
-		c, err := l.Accept()
+	for err != nil {
+		log.Println("Waiting connection with broker")
+		time.Sleep(10 * time.Second)
+	}
+
+	defer conn.Close()
+
+	log.Println("Initializing consumers on port :" + SubPort)
+
+	for i := 0; i < nTopics; i++ {
+		go handleConnection(conn, "topic_" + strconv.Itoa(i))
+	}
+}
+
+func main() {
+	if len(os.Args) != 3 {
+		log.Fatalln(ConsumersErr)
+	} else {
+		nConsumers, err := strconv.Atoi(os.Args[1])
+		nTopics, err := strconv.Atoi(os.Args[2])
+
 		if err != nil {
-			log.Println(err)
-			return
+			log.Fatalln(ArgsErr)
 		}
-		go handleConnection(c, "topic_unic")
+
+		for i := 0; i < nConsumers; i++ {
+			go consume(nTopics)
+		}
+
+		c := make(chan os.Signal, 1)
+
+		signal.Notify(c, os.Interrupt)
+
+		<-c
 	}
 }

@@ -26,8 +26,6 @@ const (
 
 var (
 	ConnectionErr = errors.New("connection error")
-	ArgsErr = errors.New("args error")
-	ProducersErr = errors.New("you need to specify how many producers will perform")
 )
 
 func stringWithCharset(length int, charset string) string {
@@ -57,7 +55,9 @@ func handleConnection(c net.Conn, topic string) {
 			log.Println(ConnectionErr)
 		}
 
-		_, err = c.Write(append(e, '\n'))
+		bytesWrited, err = c.Write(append(e, '\n'))
+
+		log.Println("Bytes written ")
 
 		if err != nil {
 			log.Fatalln(ConnectionErr)
@@ -67,17 +67,18 @@ func handleConnection(c net.Conn, topic string) {
 	}
 }
 
-func produce(nTopics int) {
+func NewProducer(nTopics int) {
 	conn, err := net.Dial(NetworkType, ":"+PubPort)
 
 	for err != nil {
+		conn, err = net.Dial(NetworkType, ":"+PubPort)
 		log.Println("Waiting connection with broker")
 		time.Sleep(10 * time.Second)
 	}
 
 	defer conn.Close()
 
-	log.Println("Initializing producers on port " + PubPort)
+	log.Println("Initializing producer on port :" + PubPort)
 
 	rand.Seed(time.Now().Unix())
 	for i := 0; i < nTopics; i++ {
@@ -86,24 +87,17 @@ func produce(nTopics int) {
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		log.Fatalln(ProducersErr)
-	} else {
-		nConsumers, err := strconv.Atoi(os.Args[1])
-		nTopics, err := strconv.Atoi(os.Args[2])
+	var nProducers = 1
+	var nTopics = 1
 
-		if err != nil {
-			log.Fatalln(ArgsErr)
-		}
-
-		for i := 0; i < nConsumers; i++ {
-			go produce(nTopics)
-		}
-
-		c := make(chan os.Signal, 1)
-
-		signal.Notify(c, os.Interrupt)
-
-		<-c
+	for i := 0; i < nProducers; i++ {
+		go NewProducer(nTopics)
 	}
+
+	c := make(chan os.Signal, 1)
+
+	signal.Notify(c, os.Interrupt)
+
+	<-c
+
 }
