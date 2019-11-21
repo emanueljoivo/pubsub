@@ -10,7 +10,6 @@ import (
 	"net/http"
 	// "time"
 	"os"
-	"time"
 	// "../structs"
 	"strconv"
 	"github.com/fatih/structs"
@@ -88,6 +87,7 @@ func getMeta(topic Topic) TopicMeta {
 func getTopic(topicName string) (int, Topic) {
 	index := -1
 	var topic Topic
+	topic.LastMessageAt = -1
 	for i , storageTopic := range storage.Topics {
 		if storageTopic.Topic == topicName {
 			topic = storageTopic
@@ -112,7 +112,6 @@ func storeMessage(topicMessage TopicMessage) (int,TopicMeta) {
 	if index == -1 {
 		return -1, TopicMeta{}
 	}
-
 	if topic.LastMessageAt != topicMessage.CreatedAt {
 		// Shifting the message queue
 		// There must be a better way of doing this. From here
@@ -134,10 +133,10 @@ func store(w http.ResponseWriter, r *http.Request) {
 
 	_ = json.NewDecoder(r.Body).Decode(&result)
 	createdAt, _ := strconv.Atoi(result["CreatedAt"])
-	retries, _ := strconv.Atoi(result["Retries"])
-	leader, _ := strconv.ParseBool(result["Leader"])
+	// leader, _ := strconv.ParseBool(result["Leader"])
 	topicMessage := TopicMessage{result["Topic"], result["Message"], createdAt}
 	ans, meta := storeMessage(topicMessage)
+
 	if (ans == -1) {
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprintf(w,"sorry, we cant create more topics ")
@@ -149,8 +148,9 @@ func store(w http.ResponseWriter, r *http.Request) {
 	// 	//treat error
 	// // }
 
-	updateSentinel(meta)
+	// updateSentinel(meta)
 	//treat error
+
 	topicMetaJson, err := json.Marshal(meta)
 	if err != nil {
 		panic(err)
@@ -165,7 +165,6 @@ func propagate(message TopicMessage, retries int, meta TopicMeta) int { //Return
 	adresses := getOtherStorages(message.Topic)
 	data := structs.Map(message)
 	data["Leader"] = "1"
-	data["Retries"] = retries
 	messageJson, err := json.Marshal(data)
 	if err != nil {
 		panic(err)
@@ -215,12 +214,34 @@ func pingSentinel() {
 	fmt.Println("hey, just pinged sentinel!")
 }
 
+func getTopicLastMessage(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	topicName := params["topic"]
+	_,topic := getTopic(topicName)
+	lastMessage := topic.Messages[nMessages - 1]
+	fmt.Fprintf(w,lastMessage)
+}
+
+func getAll(w http.ResponseWriter, r *http.Request) {
+	storageJson, err := json.Marshal(storage)
+	if err != nil {
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type","application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(storageJson)
+
+}
+
 func main() {
 	setupVariables()
 	// pingSentinel()	
 	storage = Storage{}
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/store", store).Methods("POST")
+	router.HandleFunc("/get/{topic}", getTopicLastMessage).Methods("GET")
+	router.HandleFunc("/get", getAll).Methods("GET")
 	fmt.Println("Listening on port " + port)
 	log.Fatal(http.ListenAndServe(":" + port, router))
 }
