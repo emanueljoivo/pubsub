@@ -161,9 +161,9 @@ func store(w http.ResponseWriter, r *http.Request) {
 	w.Write(topicMetaJson)
 }
 
-func propagate(message TopicMessage, retries int, meta TopicMeta) { //Return an error status
+func propagate(message TopicMessage, retries int, meta TopicMeta) int { //Return an error status
 	adresses := getOtherStorages(message.Topic)
-	data := structs.map(message)
+	data := structs.Map(message)
 	data["Leader"] = "1"
 	data["Retries"] = retries
 	messageJson, err := json.Marshal(data)
@@ -172,18 +172,36 @@ func propagate(message TopicMessage, retries int, meta TopicMeta) { //Return an 
 	}
 
 	for _, adress := range adresses {
-		response , err := http.Post("http://" + adress + "/store/" + message.Topic,"application/json", bytes.NewBuffer(messageJson))
+		r , err := http.Post("http://" + adress + "/store/" + message.Topic,"application/json", bytes.NewBuffer(messageJson))
 		if err != nil {
 			log.Fatalln(err) //Treat error
 		}
-	}	
+
+		var result map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&result)
+		lastMessageAt, _ := strconv.Atoi(result["LastMessageAt"])
+		hash := result["Hash"]
+		if (lastMessageAt != meta.LastMessageAt && hash != meta.Hash) {
+			//ERROR
+			return -1
+		}
+	}
+	return 1
 }
 
 func updateSentinel(meta TopicMeta) {
-	http.Get("http://" + sentinelPort + "/topicAdress/" + meta.Topic)
+	metaJson, err := json.Marshal(meta)
+	if err != nil {
+		panic(err)
+	}
+	_,err = http.Post("http://sentinel" + sentinelPort + "/topicAdress/" + meta.Topic,"application/json", bytes.NewBuffer(metaJson))
+	if err != nil {
+		panic(err)
+	}
 }
 
 func getOtherStorages(topicName string) [2]string {
+	// r, err = http.GET("http://sentinel" + sentinelPort + "/topicAdress/" + meta.Topic)
 	return [2]string{"a","b"}	
 }
 
@@ -198,7 +216,6 @@ func pingSentinel() {
 }
 
 func main() {
-	time.Sleep(1*time.Second)
 	setupVariables()
 	// pingSentinel()	
 	storage = Storage{}
