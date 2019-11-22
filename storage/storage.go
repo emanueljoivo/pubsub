@@ -22,12 +22,11 @@ const (
 	TTL int = 10 //Seconds
 	ServerPortEnvK    = "SERVER_PORT"
 	SentinelHostEnvK  = "SENTINEL_HOST"
-	DefaultSentinelHost = "http://127.0.0.1"
+	DefaultSentinelHost = "127.0.0.1"
 	SentinelPortEnvK  = "SENTINEL_PORT"
 	DefaultSentinelPort = "8080"
 	DefaultServerPort = "8003"
 	ContentType       = "application/json"
-	ServerAdressEnvK  = "SERVER_ADDRESS"
 	DefaultServerAdress = "localhost"
 )
 
@@ -36,8 +35,6 @@ var(
 	ServerPort string
 	SentinelPort string
 	SentinelHost string
-	port string
-	sentinelPort string
 	storage Storage
 )
 
@@ -77,7 +74,7 @@ func setupVariables() {
 	log.Printf("Server post %s:",ServerPort)
 	
 	if h, exists := os.LookupEnv(SentinelHostEnvK); !exists {
-		SentinelHost = DefaultSentinelPort
+		SentinelHost = DefaultSentinelHost
 	} else {
 		SentinelHost = h
 	}	
@@ -239,7 +236,7 @@ func propagate(message TopicMessage, retries int, meta TopicMeta) int { //Return
 
 
 func getOtherStorages(topicName string) [2]string {
-	r, _ := http.Get("http://sentinel" + sentinelPort + "/storages?topicName=" + topicName)
+	r, _ := http.Get("http://sentinel" + SentinelPort + "/storages?topicName=" + topicName)
 	var adresses [2]string
 	_ = json.NewDecoder(r.Body).Decode(&adresses)
 	return adresses
@@ -289,7 +286,7 @@ func getTopicMeta(w http.ResponseWriter, r *http.Request) {
 
 func init() {
 	setupVariables()
-	// wakeup()
+	wakeup()
 }
 
 func main() {
@@ -299,6 +296,6 @@ func main() {
 	router.HandleFunc("/get/{topic}", getTopicLastMessage).Methods("GET")
 	router.HandleFunc("/getMeta/{topic}", getTopicMeta).Methods("GET")
 	router.HandleFunc("/get", getAll).Methods("GET")
-	fmt.Println("Listening on port " + port)
+	fmt.Println("Listening on port " + ServerPort)
 	log.Fatal(http.ListenAndServe(":"+ServerPort, router))
 }
