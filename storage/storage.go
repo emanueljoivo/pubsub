@@ -22,12 +22,11 @@ const (
 	TTL int = 10 //Seconds
 	ServerPortEnvK    = "SERVER_PORT"
 	SentinelHostEnvK  = "SENTINEL_HOST"
-	DefaultSentinelHost = "http://127.0.0.1"
+	DefaultSentinelHost = "127.0.0.1"
 	SentinelPortEnvK  = "SENTINEL_PORT"
 	DefaultSentinelPort = "8080"
 	DefaultServerPort = "8003"
 	ContentType       = "application/json"
-	ServerAdressEnvK  = "SERVER_ADDRESS"
 	DefaultServerAdress = "localhost"
 )
 
@@ -36,8 +35,6 @@ var(
 	ServerPort string
 	SentinelPort string
 	SentinelHost string
-	port string
-	sentinelPort string
 	storage Storage
 )
 
@@ -278,6 +275,6 @@ func main() {
 	router.HandleFunc("/store", store)
 	router.HandleFunc("/get/{topic}", getTopicLastMessage).Methods("GET")
 	router.HandleFunc("/get", getAll).Methods("GET")
-	fmt.Println("Listening on port " + port)
+	fmt.Println("Listening on port " + ServerPort)
 	log.Fatal(http.ListenAndServe(":"+ServerPort, router))
 }

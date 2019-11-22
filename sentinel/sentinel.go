@@ -159,7 +159,6 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 
 	reqBody, err := json.Marshal(ss)
 
-	log.Print(reqBody)
 	c := &http.Client{}
 	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(reqBody))
 
@@ -168,7 +167,7 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := c.Do(req)
-
+	log.Print(resp.StatusCode)
 	defer resp.Body.Close()
 	w.WriteHeader(resp.StatusCode)
 }
