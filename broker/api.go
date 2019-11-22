@@ -171,7 +171,7 @@ func main() {
 				log.Fatalln(err)
 				return
 			}
-			handleSub(c, cMsg)
+			go handleSub(c, cMsg)
 		}
 	}(subMessages)
 
