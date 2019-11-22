@@ -2,19 +2,16 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/gob"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"time"
+	"bytes"
+	"strconv"
 )
 
 const (
@@ -22,6 +19,7 @@ const (
 	PublisherPort = "8000"
 	SubscriberPort = "9000"
 	NetworkType   = "tcp"
+	ContentType   = "application/json"
 )
 
 var (
@@ -36,94 +34,77 @@ type TopicMessage struct {
 	CreatedAt time.Time
 }
 
-type TopicRequest struct {
+type SubMessage struct {
 	Topic  string
 	Offset int
 }
 
-func dispatchMsg(topic TopicMessage) {
-	var buffer bytes.Buffer
-	enc := gob.NewEncoder(&buffer)
-	_ = enc.Encode(topic)
-	var jsonStr = buffer.Bytes()
-
-	requestUrl := SentinelAddress + "/newStorage/" + strconv.Itoa(10)
-
-	req, _ := http.NewRequest("POST", requestUrl, bytes.NewBuffer(jsonStr))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-
-	if err != nil {
-		log.Print(err)
-	}
-	defer resp.Body.Close()
-
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Headers:", resp.Header)
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Body:", string(body))
-}
-
-func pub(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("hey, this is pub")
-	message := TopicMessage{}
-
-	err := json.NewDecoder(r.Body).Decode(&message)
-	if err != nil {
-		panic(err)
-	}
-
-	message.CreatedAt = time.Now().Local()
-
-	messageJson, err := json.Marshal(message)
-	if err != nil {
-		log.Println(RequestError)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(messageJson)
-
-}
-
-func sub(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("hey, this is sub")
-	request := TopicRequest{}
-
-	err := json.NewDecoder(r.Body).Decode(&request)
-	if err != nil {
-		log.Println(err)
-	}
-
-	requestJson, err := json.Marshal(request)
-	if err != nil {
-		log.Println(RequestError)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(requestJson)
-}
-
-func handleSub(c net.Conn, cMsg chan TopicMessage) {
+func dispatchMessage(cMsg <-chan TopicMessage) {
 	for {
-		// maybe select across various channels based on the topic?
 		message := <- cMsg
 
-		e, err := json.Marshal(message)
+		topic := message.Topic
+
+		for {
+			getStorageUrl := SentinelAddress + "/storages/leader?topicName=" + topic
+
+			resp, err := http.Get(getStorageUrl)
+
+			storageData := make(map[string]string)
+			json.NewDecoder(resp.Body).Decode(&storageData)
+
+			storeEndpoint := storageData["address"] + "/store"
+			requestBody, err := json.Marshal(message)
+			_, err = http.Post(storeEndpoint, ContentType, bytes.NewBuffer(requestBody))
+
+			if err != nil {
+				break
+			}
+		}
+	}
+}
+
+
+func handleSub(c net.Conn, cMsg chan<- SubMessage) {
+	for {
+		message, err := bufio.NewReader(c).ReadBytes('\n')
 
 		if err != nil {
-			log.Println(ConnectionErr.Error() + "from sub")
+			log.Fatalln(ConnectionErr.Error() + " from sub")
 		}
 
+		var msg SubMessage
+		err = json.Unmarshal(message, &msg)
+
+		if err != nil {
+			log.Println(UnmarshalErr.Error() + "from sub")
+		}
+
+		topic := msg.Topic
+		getStorageUrl := SentinelAddress + "/get/"+ topic + "?offset=" + strconv.Itoa(msg.Offset)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		resp, err := http.Get(getStorageUrl)
+
+		storageData := make(map[string]string)
+		json.NewDecoder(resp.Body).Decode(&storageData)
+
+		getTopicMessagesEndpoint := storageData["address"] + "/topics/" + topic
+		response, err := http.Get(getTopicMessagesEndpoint)
+
+		topicMessages := make(map[string]string)
+		json.NewDecoder(response.Body).Decode(&storageData)
+
+		e, err := json.Marshal(topicMessages["messages"])
+
+		if err != nil {
+			log.Println(ConnectionErr)
+		}
 		_, err = c.Write(append(e, '\n'))
-		log.Printf("Msg %s dequeued \n", message.Message)
-
-		if err != nil {
-			log.Fatalln(ConnectionErr.Error() + "from sub")
-		}
+		
 	}
 }
 
@@ -149,7 +130,7 @@ func handlePub(c net.Conn, cMsg chan TopicMessage) {
 
 func main() {
 	// the channel should be buffered
-	messages := make(chan TopicMessage, 100)
+	pubMessages := make(chan TopicMessage, 100)
 
 	// pub
 	go func(cMsg chan TopicMessage) {
@@ -169,10 +150,11 @@ func main() {
 			}
 			go handlePub(c, cMsg)
 		}
-	} (messages)
+	} (pubMessages)
 
+	subMessages := make(chan SubMessage, 100)
 	// sub
-	go func(cMsg chan TopicMessage) {
+	go func(cMsg chan SubMessage) {
 		log.Println("Initializing sub broker")
 		l, err := net.Listen(NetworkType, ":"+SubscriberPort)
 		if err != nil {
@@ -187,9 +169,11 @@ func main() {
 				log.Fatalln(err)
 				return
 			}
-			go handleSub(c, cMsg)
+			handleSub(c, cMsg)
 		}
-	} (messages)
+	} (subMessages)
+
+	go dispatchMessage (pubMessages)
 
 	cJoin := make(chan os.Signal, 1)
 
