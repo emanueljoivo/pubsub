@@ -68,19 +68,22 @@ func GetStorage(w http.ResponseWriter, r *http.Request) {
 	topicName := r.FormValue("topicName")
 	log.Printf("Querying %s", topicName)
 
-	url := ConsulAddr + GetService + topicName
-
-	var sm StorageMeta
+	url := ConsulAddr + GetServices
+	var sms map[string]StorageMeta
 
 	response, err := http.Get(url)
-	log.Println("responde " + response.Status)
+	log.Println(response)
 	if err != nil {
 		log.Println(RequestError.Error())
 	}
 
 	if response != nil {
-		_ = json.NewDecoder(response.Body).Decode(&sm)
+		_ = json.NewDecoder(response.Body).Decode(&sms)
 	}
+
+	var sm StorageMeta
+
+	// search for the appropriate storage on the sms map and returns
 
 	log.Println(sm)
 	storageMeta, _ := json.Marshal(response)
@@ -134,7 +137,6 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 
 	Storages[ss.Name] = ss
 
-	log.Print(ss)
 	bd, _ := json.Marshal(ss)
 
 	c := &http.Client{}
@@ -145,7 +147,7 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := c.Do(req)
-	log.Println(resp.Status)
+	log.Printf("Storage %s registered. Request status %s.\n", ss.Name, resp.Status)
 	defer resp.Body.Close()
 	w.WriteHeader(resp.StatusCode)
 }
@@ -188,7 +190,7 @@ func main() {
 func DeregisterStorage(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
-	url := ConsulAddr + DeregisterServiceUri
+	url := ConsulAddr + DeregisterServiceUri + id
 
 	deleteMap := make(map[string]string)
 	deleteMap["Node"] = id
