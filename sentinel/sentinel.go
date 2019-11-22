@@ -6,8 +6,11 @@ import (
 	"errors"
 	"github.com/gorilla/mux"
 	"log"
+	"math/rand"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 )
 
 const (
@@ -16,6 +19,8 @@ const (
 	DeregisterServiceUri = "/v1/agent/service/deregister/:service_id"
 	GetServiceHealthUri  = "/agent/health/service/id/:service_id"
 	ContentType          = "application/json"
+	charset     = "abcdefghijklmnopqrstuvwxyz" +
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
 var (
@@ -41,7 +46,6 @@ type TopicMeta struct {
 type StorageMeta struct {
 	TopicsNumber int
 	Address      string
-	Port		string
 	Topics       [nTopics]string
 	Status       bool
 	ID           string
@@ -57,7 +61,6 @@ type StorageService struct {
 	ID string
 	Name string
 	Address string
-	Port string
 }
 
 type TopicMessage struct {
@@ -65,6 +68,21 @@ type TopicMessage struct {
 	Message   string
 	CreatedAt int
 }
+
+func stringWithCharset(length int, charset string) string {
+	var seededRand = rand.New(
+		rand.NewSource(time.Now().UnixNano()))
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
+func generateStorageName(length int) string {
+	return stringWithCharset(length, charset)
+}
+
 
 func GetStorage(w http.ResponseWriter, r *http.Request) {
 	// get a available storage service meta in consul
@@ -104,26 +122,28 @@ func DeregisterStorage(w http.ResponseWriter, r *http.Request) {
 }
 
 func RegisterService(w http.ResponseWriter, r *http.Request) {
-	var s StorageMeta
+	var s map[string]string
 	_ = json.NewDecoder(r.Body).Decode(&s)
 
 	url := ConsulAddr + RegisterServiceUri
 
-	var ss StorageService
-	ss.Name = "storage"
-	ss.Port = s.Port
-	ss.Address = s.Address
-	ss.ID = strconv.Itoa(idCounter)
+	ss := make(map[string]string)
+
+	var absoluteAddr = s["Address"]
+	l := strings.Split(absoluteAddr, ":")
+	ss["Address"] = l[0]
+	ss["Name"] = generateStorageName(10)
+	ss["Port"] = l[1]
+	ss["ID"] = strconv.Itoa(idCounter)
 	idCounter++
-	Storages[s.ID] = s
 
-	log.Println(ss)
-
+	log.Print(ss)
 	bd, _ := json.Marshal(ss)
 
 	c := &http.Client{}
 	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(bd))
 
+	log.Print(url)
 	if err != nil {
 		log.Println(RequestError.Error())
 	}
