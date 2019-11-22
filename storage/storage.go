@@ -11,62 +11,60 @@ import (
 	// "time"
 	"os"
 	// "../structs"
-	"strconv"
 	"github.com/fatih/structs"
+	"strconv"
 )
-
 
 const (
-	nTopics int = 3
-	nMessages int = 5
-	TTL int = 10 //Seconds
-	ServerPortEnvK    = "SERVER_PORT"
-	SentinelHostEnvK  = "SENTINEL_HOST"
-	ServerAdressEnvK  = "SERVER_ADDRESS"
-	SentinelPortEnvK  = "SENTINEL_PORT"
-	IDEnvK = "ID"
-	DefaultID = "ID"
-	DefaultSentinelHost = "http://127.0.0.1"
-	DefaultSentinelPort = "8080"
-	DefaultServerPort = "8003"
-	ContentType       = "application/json"
-	DefaultServerAdress = "localhost"
+	nTopics             int = 3
+	nMessages           int = 5
+	TTL                 int = 10 //Seconds
+	ServerPortEnvK          = "SERVER_PORT"
+	SentinelHostEnvK        = "SENTINEL_HOST"
+	ServerAdressEnvK        = "SERVER_ADDRESS"
+	SentinelPortEnvK        = "SENTINEL_PORT"
+	IDEnvK                  = "ID"
+	DefaultID               = "ID"
+	DefaultSentinelHost     = "http://127.0.0.1"
+	DefaultSentinelPort     = "8080"
+	DefaultServerPort       = "8003"
+	ContentType             = "application/json"
+	DefaultServerAdress     = "localhost"
 )
 
-var(
-	Id string
+var (
+	Id           string
 	ServerAdress string
-	ServerPort string
+	ServerPort   string
 	SentinelPort string
 	SentinelHost string
-	storage Storage
+	storage      Storage
 )
 
 //STRUCTS
 type TopicMessage struct {
-	Topic string
-	Message string
+	Topic     string
+	Message   string
 	CreatedAt int
 }
 
 type Topic struct {
-	Messages [nMessages]string //Last message is the newest
-	Topic string
+	Messages      [nMessages]string //Last message is the newest
+	Topic         string
 	LastMessageAt int
-	Hash string
+	Hash          string
 }
 
 type TopicMeta struct {
-	Topic string
-	Hash string
+	Topic         string
+	Hash          string
 	LastMessageAt int
 }
 
 type Storage struct {
-	Topics [nTopics]Topic
+	Topics  [nTopics]Topic
 	nTopics int
 }
-
 
 //FUNCS
 func setupVariables() {
@@ -75,13 +73,13 @@ func setupVariables() {
 	} else {
 		ServerPort = p
 	}
-	log.Printf("Server post %s:",ServerPort)
-	
+	log.Printf("Server post %s:", ServerPort)
+
 	if h, exists := os.LookupEnv(SentinelHostEnvK); !exists {
 		SentinelHost = DefaultSentinelHost
 	} else {
 		SentinelHost = h
-	}	
+	}
 	log.Printf("Sentinel host %s", SentinelHost)
 
 	if p, exists := os.LookupEnv(SentinelPortEnvK); !exists {
@@ -89,21 +87,21 @@ func setupVariables() {
 	} else {
 		SentinelPort = p
 	}
-	log.Printf("Sentinel port %s:",SentinelPort) //this could be fixed
+	log.Printf("Sentinel port %s:", SentinelPort) //this could be fixed
 
 	if p, exists := os.LookupEnv(ServerAdressEnvK); !exists {
 		ServerAdress = DefaultServerAdress
 	} else {
 		ServerAdress = p
 	}
-	log.Printf("Server adress %s:",ServerAdress)
+	log.Printf("Server adress %s:", ServerAdress)
 	if p, exists := os.LookupEnv(IDEnvK); !exists {
 		Id = DefaultID
 	} else {
 		Id = p
 	}
-	log.Printf("ID : %s:",Id)
-	
+	log.Printf("ID : %s:", Id)
+
 }
 func computeHashKeyForList(list [5]string) string {
 	var buffer bytes.Buffer
@@ -127,7 +125,7 @@ func getTopic(topicName string) (int, Topic) {
 	index := -1
 	var topic Topic
 	topic.LastMessageAt = -1
-	for i , storageTopic := range storage.Topics {
+	for i, storageTopic := range storage.Topics {
 		if storageTopic.Topic == topicName {
 			topic = storageTopic
 			index = i
@@ -144,7 +142,7 @@ func getTopic(topicName string) (int, Topic) {
 	return index, topic
 }
 
-func storeMessage(topicMessage TopicMessage) (int,TopicMeta) {
+func storeMessage(topicMessage TopicMessage) (int, TopicMeta) {
 	topicName := topicMessage.Topic
 	index, topic := getTopic(topicName)
 
@@ -155,7 +153,7 @@ func storeMessage(topicMessage TopicMessage) (int,TopicMeta) {
 		// Shifting the message queue
 		// There must be a better way of doing this. From here
 		var slice []string
-		slice = append(topic.Messages[1:5],topicMessage.Message)
+		slice = append(topic.Messages[1:5], topicMessage.Message)
 		copy(topic.Messages[:], slice[0:5])
 		// to here.
 
@@ -175,7 +173,8 @@ func store(w http.ResponseWriter, r *http.Request) {
 	// leader, _ := strconv.ParseBool(result["Leader"])
 	topicMessage := TopicMessage{result["Topic"], result["Message"], createdAt}
 	ans, meta := storeMessage(topicMessage)
-	if (ans == -1) {
+
+	if ans == -1 {
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprintf(w, "ERROR")
 		return
@@ -251,14 +250,12 @@ func store(w http.ResponseWriter, r *http.Request) {
 // 	return adresses
 // }
 
-
-
 func getTopicLastMessage(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	topicName := params["topic"]
-	_,topic := getTopic(topicName)
-	lastMessage := topic.Messages[nMessages - 1]
-	fmt.Fprintf(w,lastMessage)
+	_, topic := getTopic(topicName)
+	lastMessage := topic.Messages[nMessages-1]
+	fmt.Fprintf(w, lastMessage)
 }
 
 func getAll(w http.ResponseWriter, r *http.Request) {
@@ -267,20 +264,20 @@ func getAll(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	w.Header().Set("Content-Type","application/json")
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(storageJson)
 
 }
 
 func health(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w,"OK")
+	fmt.Fprintf(w, "OK")
 }
 
 func getTopicMeta(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	topicName := params["topic"]
-	_,topic := getTopic(topicName)
+	_, topic := getTopic(topicName)
 	meta := getMeta(topic)
 	topicMetaJson, err := json.Marshal(meta)
 	if err != nil {
