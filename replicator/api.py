@@ -72,18 +72,18 @@ def index(n):
             "spec":{
                 "containers":[
                     {"name":name,
-                     "image":"ignacioschmid/pubsub:storage",
+                     "image":"ignacioschmid/pubsub:storage_test",
                      "ports":[{"containerPort":8003}],
-                     "env":[{"name":"SENTINEL_HOST","value":"http://127.0.0.1"},
+                     "env":[{"name":"SENTINEL_HOST","value":"http://192.168.25.68"},
                             {"name":"SENTINEL_PORT","value":"8080"},
                             {"name":"SERVER_ADDRESS","value":ip},
                             {"name":"SERVER_PORT","value":str(port)},
                             {"name":"ID","value":name}]
             }]}}
 
-        core_v1.create_namespaced_pod(body=pod_manifest,namespace="default")
+        pod = core_v1.create_namespaced_pod(body=pod_manifest,namespace="default")
     
-    return "OK"
+    return ip + ':' + str(port)
 
 
 def setup():

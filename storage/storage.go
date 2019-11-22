@@ -176,7 +176,7 @@ func store(w http.ResponseWriter, r *http.Request) {
 
 	if ans == -1 {
 		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprintf(w, "sorry, we cant create more topics ")
+		fmt.Fprintf(w, "ERROR")
 		return
 	}
 
@@ -201,53 +201,54 @@ func store(w http.ResponseWriter, r *http.Request) {
 // func updateSentinel(meta) {
 // 	return meta
 // }
-func wakeup() {
-	adress := map[string]string{"Address": ServerAdress + ":" + ServerPort, "ID": Id}
-	adressJson, err := json.Marshal(adress)
-	if err != nil {
-		panic(err)
-	}
-	url := SentinelHost + ":" + SentinelPort + "/storages/register"
-	_, err = http.Post(url, ContentType, bytes.NewBuffer(adressJson))
-	if err != nil {
-		log.Fatalln(err)
-	}
-	log.Println("hey, just pinged sentinel!")
-}
+// func wakeup() {
+// 	adress := map[string]string{"Address": ServerAdress+":"+ServerPort, "ID":Id}
+// 	adressJson, err := json.Marshal(adress)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	url := SentinelHost + ":" + SentinelPort + "/storages/register"
+// 	_, err = http.Post(url, ContentType, bytes.NewBuffer(adressJson))
+// 	if err != nil {
+// 		log.Fatalln(err)
+// 	}
+// 	log.Println("hey, just pinged sentinel!")
+// }
 
-func propagate(message TopicMessage, retries int, meta TopicMeta) int { //Return an error status
-	adresses := getOtherStorages(message.Topic)
-	data := structs.Map(message)
-	data["Leader"] = "1"
-	messageJson, err := json.Marshal(data)
-	if err != nil {
-		panic(err)
-	}
+// func propagate(message TopicMessage, retries int, meta TopicMeta) int { //Return an error status
+// 	adresses := getOtherStorages(message.Topic)
+// 	data := structs.Map(message)
+// 	data["Leader"] = "1"
+// 	messageJson, err := json.Marshal(data)
+// 	if err != nil {
+// 		panic(err)
+// 	}
 
-	for _, adress := range adresses {
-		r, err := http.Post("http://"+adress+"/store", "application/json", bytes.NewBuffer(messageJson))
-		if err != nil {
-			log.Fatalln(err) //Treat error
-		}
+// 	for _, adress := range adresses {
+// 		r , err := http.Post("http://" + adress + "/store", "application/json", bytes.NewBuffer(messageJson))
+// 		if err != nil {
+// 			log.Fatalln(err) //Treat error
+// 		}
 
-		var result map[string]string
-		_ = json.NewDecoder(r.Body).Decode(&result)
-		lastMessageAt, _ := strconv.Atoi(result["LastMessageAt"])
-		hash := result["Hash"]
-		if lastMessageAt != meta.LastMessageAt && hash != meta.Hash {
-			//ERROR
-			return -1
-		}
-	}
-	return 1
-}
+// 		var result map[string]string
+// 		_ = json.NewDecoder(r.Body).Decode(&result)
+// 		lastMessageAt, _ := strconv.Atoi(result["LastMessageAt"])
+// 		hash := result["Hash"]
+// 		if (lastMessageAt != meta.LastMessageAt && hash != meta.Hash) {
+// 			//ERROR
+// 			return -1
+// 		}
+// 	}
+// 	return 1
+// }
 
-func getOtherStorages(topicName string) [2]string {
-	r, _ := http.Get("http://sentinel" + SentinelPort + "/storages?topicName=" + topicName)
-	var adresses [2]string
-	_ = json.NewDecoder(r.Body).Decode(&adresses)
-	return adresses
-}
+
+// func getOtherStorages(topicName string) [2]string {
+// 	r, _ := http.Get("http://sentinel" + SentinelPort + "/storages?topicName=" + topicName)
+// 	var adresses [2]string
+// 	_ = json.NewDecoder(r.Body).Decode(&adresses)
+// 	return adresses
+// }
 
 func getTopicLastMessage(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
@@ -291,7 +292,7 @@ func getTopicMeta(w http.ResponseWriter, r *http.Request) {
 
 func init() {
 	setupVariables()
-	wakeup()
+	// wakeup()
 }
 
 func main() {

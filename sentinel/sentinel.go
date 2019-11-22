@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"fmt"
 )
 
 const (
@@ -120,7 +121,7 @@ func GetStorages(w http.ResponseWriter, r *http.Request) {
 func RegisterService(w http.ResponseWriter, r *http.Request) {
 	var s map[string]string
 	_ = json.NewDecoder(r.Body).Decode(&s)
-
+	fmt.Println(s)
 	url := ConsulAddr + RegisterServiceUri
 
 	var ss StorageMeta
