@@ -27,7 +27,7 @@ const (
 	DefaultSentinelPort = "8080"
 	DefaultServerPort = "8003"
 	ContentType       = "application/json"
-	ServerAdressEnvK  = "SERVER_ADRESS"
+	ServerAdressEnvK  = "SERVER_ADDRESS"
 	DefaultServerAdress = "localhost"
 )
 
@@ -165,7 +165,7 @@ func store(w http.ResponseWriter, r *http.Request) {
 
 	_ = json.NewDecoder(r.Body).Decode(&result)
 	createdAt, _ := strconv.Atoi(result["CreatedAt"])
-	// leader, _ := strconv.ParseBool(result["Leader"])
+	Leader, _ := strconv.ParseBool(result["Leader"])
 	topicMessage := TopicMessage{result["Topic"], result["Message"], createdAt}
 	ans, meta := storeMessage(topicMessage)
 
@@ -262,6 +262,9 @@ func getAll(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func health(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w,"OK")
+}
 
 func init() {
 	setupVariables()
