@@ -4,16 +4,10 @@ services:
     image: pubsub/storage
     env_file:
       - ./config.env
-    networks:
-      - minimesh
     deploy:
       replicas: 4
       update_config:
         parallelism: 1
         delay: 10s
     ports:
-      - "8088:8088"
-
-networks:
-  minimesh:
-    external: true
+      - "8003:8003"
