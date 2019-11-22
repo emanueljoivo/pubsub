@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/gorilla/mux"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 const (
@@ -25,6 +25,7 @@ var (
 
 var Topics map[string]TopicMeta
 var Storages map[string]StorageMeta
+var idCounter = 0
 
 const nTopics int = 3
 const nReplicas int = 2
@@ -104,14 +105,7 @@ func DeregisterStorage(w http.ResponseWriter, r *http.Request) {
 
 func RegisterService(w http.ResponseWriter, r *http.Request) {
 	var s StorageMeta
-	log.Println(s)
-	body, _ := ioutil.ReadAll(r.Body)
-
-	err := json.Unmarshal(body, &s)
-
-	if err != nil {
-		log.Printf(UnmarshalErr.Error())
-	}
+	_ = json.NewDecoder(r.Body).Decode(&s)
 
 	url := ConsulAddr + RegisterServiceUri
 
@@ -119,14 +113,16 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 	ss.Name = "storage"
 	ss.Port = s.Port
 	ss.Address = s.Address
-	ss.ID = s.ID
+	ss.ID = strconv.Itoa(idCounter)
+	idCounter++
+	Storages[s.ID] = s
 
 	log.Println(ss)
 
-	reqBody, err := json.Marshal(&ss)
+	bd, _ := json.Marshal(ss)
 
 	c := &http.Client{}
-	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(reqBody))
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(bd))
 
 	if err != nil {
 		log.Println(RequestError.Error())
