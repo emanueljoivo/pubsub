@@ -16,11 +16,11 @@ import (
 )
 
 const (
-	SentinelAddress = "localhost:5002"
-	PublisherPort   = "8000"
-	SubscriberPort  = "9000"
-	NetworkType     = "tcp"
-	ContentType     = "application/json"
+	ReplicatorAddress = "localhost:5000"
+	PublisherPort     = "8000"
+	SubscriberPort    = "9000"
+	NetworkType       = "tcp"
+	ContentType       = "application/json"
 )
 
 var (
@@ -35,6 +35,11 @@ type TopicMessage struct {
 	CreatedAt time.Time
 }
 
+const MaxTopicsAmount int = 3
+
+var topics map[string]string
+var storagesAddr map[string]int8
+
 type SubMessage struct {
 	Topic  string
 	Offset int
@@ -47,12 +52,16 @@ func dispatchMessage(cMsg <-chan TopicMessage) {
 		topic := message.Topic
 
 		for {
-			getStorageUrl := SentinelAddress + "/storages/leader?topicName=" + topic
+			getStorageUrl := ReplicatorAddress + "/storages/leader?topicName=" + topic
 
 			resp, err := http.Get(getStorageUrl)
 
 			storageData := make(map[string]string)
-			json.NewDecoder(resp.Body).Decode(&storageData)
+			err = json.NewDecoder(resp.Body).Decode(&storageData)
+
+			if err != nil {
+				log.Println(RequestError.Error())
+			}
 
 			storeEndpoint := storageData["Address"] + "/store"
 			requestBody, err := json.Marshal(message)
@@ -82,7 +91,7 @@ func handleSub(c net.Conn, cMsg chan<- SubMessage) {
 		}
 
 		topic := msg.Topic
-		getStorageUrl := SentinelAddress + "/storage?topicName=" + topic 
+		getStorageUrl := ReplicatorAddress + "/storage?topicName=" + topic
 
 		if err != nil {
 			log.Fatal(err)
@@ -93,7 +102,7 @@ func handleSub(c net.Conn, cMsg chan<- SubMessage) {
 		storageData := make(map[string]string)
 		json.NewDecoder(resp.Body).Decode(&storageData)
 
-		getTopicMessagesEndpoint := storageData["Address"] + "/get/" + topic + "?offset=" + msg.Offset
+		getTopicMessagesEndpoint := storageData["Address"] + "/get/" + topic + "?offset=" + strconv.Itoa(msg.Offset)
 		response, err := http.Get(getTopicMessagesEndpoint)
 
 		topicMessages := make(map[string]string)
@@ -130,50 +139,55 @@ func handlePub(c net.Conn, cMsg chan TopicMessage) {
 	}
 }
 
+func publish(cMsg chan TopicMessage) {
+	log.Println("Initializing pub broker")
+	l, err := net.Listen(NetworkType, ":"+PublisherPort)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer l.Close()
+
+	for {
+		c, err := l.Accept()
+		if err != nil {
+			log.Fatalln(err)
+			return
+		}
+		go handlePub(c, cMsg)
+	}
+}
+
+func subscriber(cMsg chan SubMessage) {
+	log.Println("Initializing sub broker")
+	l, err := net.Listen(NetworkType, ":"+SubscriberPort)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer l.Close()
+
+	for {
+		c, err := l.Accept()
+		if err != nil {
+			log.Fatalln(err)
+			return
+		}
+		go handleSub(c, cMsg)
+	}
+}
+
+
 func main() {
 	// the channel should be buffered
 	pubMessages := make(chan TopicMessage, 100)
 
 	// pub
-	go func(cMsg chan TopicMessage) {
-		log.Println("Initializing pub broker")
-		l, err := net.Listen(NetworkType, ":"+PublisherPort)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		defer l.Close()
-
-		for {
-			c, err := l.Accept()
-			if err != nil {
-				log.Fatalln(err)
-				return
-			}
-			go handlePub(c, cMsg)
-		}
-	}(pubMessages)
+	go publish(pubMessages)
 
 	subMessages := make(chan SubMessage, 100)
 	// sub
-	go func(cMsg chan SubMessage) {
-		log.Println("Initializing sub broker")
-		l, err := net.Listen(NetworkType, ":"+SubscriberPort)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		defer l.Close()
-
-		for {
-			c, err := l.Accept()
-			if err != nil {
-				log.Fatalln(err)
-				return
-			}
-			go handleSub(c, cMsg)
-		}
-	}(subMessages)
+	go subscriber(subMessages)
 
 	go dispatchMessage(pubMessages)
 
