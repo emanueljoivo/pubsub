@@ -165,7 +165,7 @@ func store(w http.ResponseWriter, r *http.Request) {
 
 	_ = json.NewDecoder(r.Body).Decode(&result)
 	createdAt, _ := strconv.Atoi(result["CreatedAt"])
-	Leader, _ := strconv.ParseBool(result["Leader"])
+	// leader, _ := strconv.ParseBool(result["Leader"])
 	topicMessage := TopicMessage{result["Topic"], result["Message"], createdAt}
 	ans, meta := storeMessage(topicMessage)
 
@@ -193,6 +193,9 @@ func store(w http.ResponseWriter, r *http.Request) {
 	w.Write(topicMetaJson)
 }
 
+// func updateSentinel(meta) {
+// 	return meta
+// }
 func wakeup() {
 	adress := map[string]string{"Address": ServerAdress,
 								"Port": ServerPort}
@@ -218,7 +221,7 @@ func propagate(message TopicMessage, retries int, meta TopicMeta) int { //Return
 	}
 
 	for _, adress := range adresses {
-		r , err := http.Post("http://" + adress + "/store/" + message.Topic,"application/json", bytes.NewBuffer(messageJson))
+		r , err := http.Post("http://" + adress + "/store", "application/json", bytes.NewBuffer(messageJson))
 		if err != nil {
 			log.Fatalln(err) //Treat error
 		}
@@ -237,9 +240,12 @@ func propagate(message TopicMessage, retries int, meta TopicMeta) int { //Return
 
 
 func getOtherStorages(topicName string) [2]string {
-	// r, err = http.GET("http://sentinel" + sentinelPort + "/topicAdress/" + meta.Topic)
-	return [2]string{"a","b"}	
+	r, _ := http.Get("http://sentinel" + sentinelPort + "/storages?topicName=" + topicName)
+	var adresses [2]string
+	_ = json.NewDecoder(r.Body).Decode(&adresses)
+	return adresses
 }
+
 
 
 func getTopicLastMessage(w http.ResponseWriter, r *http.Request) {
@@ -266,9 +272,25 @@ func health(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w,"OK")
 }
 
+func getTopicMeta(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	topicName := params["topic"]
+	_,topic := getTopic(topicName)
+	meta := getMeta(topic)
+	topicMetaJson, err := json.Marshal(meta)
+	if err != nil {
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(topicMetaJson)
+
+}
+
 func init() {
 	setupVariables()
-	wakeup()
+	// wakeup()
 }
 
 func main() {
@@ -276,6 +298,7 @@ func main() {
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/store", store)
 	router.HandleFunc("/get/{topic}", getTopicLastMessage).Methods("GET")
+	router.HandleFunc("/getMeta/{topic}", getTopicMeta).Methods("GET")
 	router.HandleFunc("/get", getAll).Methods("GET")
 	fmt.Println("Listening on port " + port)
 	log.Fatal(http.ListenAndServe(":"+ServerPort, router))
