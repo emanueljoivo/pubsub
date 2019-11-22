@@ -77,7 +77,7 @@ func setupVariables() {
 	log.Printf("Server post %s:",ServerPort)
 	
 	if h, exists := os.LookupEnv(SentinelHostEnvK); !exists {
-		SentinelHost = DefaultSentinelPort
+		SentinelHost = DefaultSentinelHost
 	} else {
 		SentinelHost = h
 	}	
@@ -166,6 +166,7 @@ func store(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(r.Body).Decode(&result)
 	createdAt, _ := strconv.Atoi(result["CreatedAt"])
 	Leader, _ := strconv.ParseBool(result["Leader"])
+	log.Print(Leader)
 	topicMessage := TopicMessage{result["Topic"], result["Message"], createdAt}
 	ans, meta := storeMessage(topicMessage)
 
