@@ -13,6 +13,33 @@ def randomword(length):
 
 app = Flask(__name__)
 
+def get_node_cluster(k8s_conf_path):
+    """ Gets the IP address of one slave node contained
+    in a Kubernetes cluster. The k8s API aways returns information
+    about the master node followed by the information of the slaves.
+    Therefore, in order to avoid get the IP of the master node,
+    this function always get the last node listed by the API.
+    Raises:
+        Exception -- It was not possible to connect with the
+        Kubernetes cluster.
+    Returns:
+        string -- The node IP
+    """
+    try:
+        kube.config.load_kube_config(k8s_conf_path)
+        CoreV1Api = kube.client.CoreV1Api()
+        for node in CoreV1Api.list_node().items:
+            is_ready = \
+                [s for s in node.status.conditions
+                 if s.type == 'Ready'][0].status == 'True'
+            if is_ready:
+                node_info = node
+        node_ip = node_info.status.addresses[0].address
+        return node_ip
+    except Exception:
+        API_LOG.log("Connection with the cluster %s \
+                    was not successful" % k8s_conf_path)
+                    
 @app.route('/create/<int:n>')
 def index(n):
     for i in range(n):
@@ -29,15 +56,12 @@ def index(n):
             "spec":{
                 "selector":{"app":name},
                 "ports":[{"protocol":"TCP","port":8003}],
-                "type":"LoadBalancer"}}
+                "type":"NodePort"}}
 
         service = core_v1.create_namespaced_service(namespace="default", body=service_manifest)
-        ingress = service.status.load_balancer.ingress
-        while (not ingress):
-            service = core_v1.read_namespaced_service(namespace="default", name=name+"-service")
-            ingress = service.status.load_balancer.ingress
-        print(ingress)
-        ip = ingress[0].ip
+        port = service.spec.ports[0].node_port
+        ip = get_node_cluster(os.environ['KUBECONFIG'])
+        print(ip + ':' + str(port))
         #pod
         pod_manifest = {
             "apiVersion":"v1",
@@ -52,12 +76,12 @@ def index(n):
                      "ports":[{"containerPort":8003}],
                      "env":[{"name":"SENTINEL_HOST","value":"http://127.0.0.1"},
                             {"name":"SENTINEL_PORT","value":"8080"},
-                            {"name":"SERVER_ADRESS","value":ip},
-                            {"name":"SERVER_PORT","value":"8003"},
+                            {"name":"SERVER_ADDRESS","value":ip},
+                            {"name":"SERVER_PORT","value":str(port)},
                             {"name":"ID","value":name}]
             }]}}
 
-            core_v1.create_namespaced_pod(body=pod_manifest,namespace="default")
+        core_v1.create_namespaced_pod(body=pod_manifest,namespace="default")
     
     return "OK"
 

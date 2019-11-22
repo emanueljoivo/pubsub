@@ -17,9 +17,9 @@ type TopicMessage struct {
 }
 
 const (
-	PubPort       = "8000"
-	NetworkType   = "tcp"
-	charset       = "abcdefghijklmnopqrstuvwxyz" +
+	PubPort     = "8000"
+	NetworkType = "tcp"
+	charset     = "abcdefghijklmnopqrstuvwxyz" +
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
@@ -78,7 +78,7 @@ func NewProducer() {
 	log.Println("Initializing producer on port :" + PubPort)
 
 	rand.Seed(time.Now().Unix())
-	produce(conn, "topic")
+	produce(conn, "default")
 }
 
 func main() {

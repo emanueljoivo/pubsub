@@ -26,9 +26,24 @@ type TopicMessage struct {
 	Message string
 }
 
+type SubMessage struct {
+	Topic  string
+	Offset int
+}
+
 func consume(c net.Conn) {
 	for {
+		subMessage := &SubMessage{"default", 0}
+		e, err := json.Marshal(subMessage)
+
+		if err != nil {
+			log.Println(UnmarshalErr)
+		}
+
+		_, err = c.Write(append(e, '\n'))
+
 		message, err := bufio.NewReader(c).ReadBytes('\n')
+
 		if err != nil {
 			log.Fatalln(ConnectionErr)
 		}

@@ -21,4 +21,4 @@ EXPOSE 8003
 
 COPY --from=build-stage /build/storage /service
 
-ENTRYPOINT ["./sentinel"]
+ENTRYPOINT ["./storage"]
