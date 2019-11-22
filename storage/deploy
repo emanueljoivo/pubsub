@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+if [ "$(docker info | grep swarm | sed 's/Swarm: //g')" == "inactive" ]; then
+    sudo docker swarm init
+    sudo docker stack deploy -c $(pwd)/docker-stack.yml storages
+else
+    sudo docker stack deploy -c $(pwd)/docker-stack.yml storages
+fi
+

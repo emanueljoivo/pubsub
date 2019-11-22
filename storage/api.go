@@ -15,20 +15,42 @@ import (
 
 const nTopics int = 3
 const nMessages int = 5
-const timeToLive int = 10 //Seconds
-var port string
-var sentinelPort string
+const TTL int = 10 //Seconds
+
+const (
+	ServerPortEnvK    = "SERVER_PORT"
+	SentinelHostEnvK  = "SENTINEL_HOST"
+	SentinelPortEnvK    = "SENTINEL_PORT"
+	DefaultServerPort = "8082"
+	ContentType          = "application/json"
+)
+
+var ServerPort string
+var SentinelPort string
+var SentinelHost string
 
 func setupVariables() {
-	port = os.Getenv("PORT")
-	if port == "" {
-	port = "8003"
-}
-	sentinelPort = os.Getenv("SENTINEL")
-	fmt.Println(sentinelPort)
-	if sentinelPort == "" { //This dont work, i dont know why
-		sentinelPort = "8002"
+	if p, exists := os.LookupEnv(ServerPortEnvK); !exists {
+		ServerPort = DefaultServerPort
+	} else {
+		ServerPort = p
 	}
+	log.Printf("Server post %s:",ServerPort)
+	
+	if h, exists := os.LookupEnv(SentinelHostEnvK); !exists {
+		log.Fatalln("Require specify the sentinel host")
+	} else {
+		SentinelHost = h
+	}	
+	log.Printf("Sentinel host %s", SentinelHost)
+
+	if p, exists := os.LookupEnv(SentinelPortEnvK); !exists {
+		log.Fatalln("Require specify the sentinel http port")
+	} else {
+		SentinelPort = p
+	}
+	log.Printf("Sentinel port %s:",ServerPort)
+	
 }
 func computeHashKeyForList(list [5]string) string {
 	var buffer bytes.Buffer
@@ -49,36 +71,35 @@ func getMeta(topic Topic) TopicMeta {
 }
 
 type TopicMessage struct {
-	Topic string
-	Message string
+	Topic     string
+	Message   string
 	CreatedAt int
 }
 
 type Topic struct {
-	Messages [nMessages]string //Last message is the newest
-	Title string
+	Messages      [nMessages]string //Last message is the newest
+	Title         string
 	LastMessageAt int
-	Hash string
+	Hash          string
 }
 
 type TopicMeta struct {
-	Title string
-	Hash string
+	Title         string
+	Hash          string
 	LastMessageAt int
 }
 
 type Storage struct {
-	Topics [nTopics]Topic
+	Topics  [nTopics]Topic
 	nTopics int
 }
-
 
 var storage Storage
 
 func getTopic(topicName string) (int, Topic) {
 	index := -1
 	var topic Topic
-	for i , storageTopic := range storage.Topics {
+	for i, storageTopic := range storage.Topics {
 		if storageTopic.Title == topicName {
 			topic = storageTopic
 			fmt.Println("HEY U ALREADY HAVE ONE")
@@ -93,7 +114,7 @@ func getTopic(topicName string) (int, Topic) {
 	if index >= nTopics {
 		index = -1
 	}
-	return index,topic
+	return index, topic
 }
 
 func store(w http.ResponseWriter, r *http.Request) {
@@ -104,18 +125,18 @@ func store(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	topicName := topicMessage.Topic
-	index,topic := getTopic(topicName)
-	
+	index, topic := getTopic(topicName)
+
 	if index == -1 {
 		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprintf(w,"sorry, we cant create more topics ")
+		fmt.Fprintf(w, "sorry, we cant create more topics ")
 		return
 	}
 
 	// Shifting the message queue
 	// There must be a better way of doing this. From here
 	var slice []string
-	slice = append(topic.Messages[1:5],topicMessage.Message)
+	slice = append(topic.Messages[1:5], topicMessage.Message)
 	copy(topic.Messages[:], slice[0:5])
 	// to here.
 
@@ -123,36 +144,37 @@ func store(w http.ResponseWriter, r *http.Request) {
 	topicHash := computeHashKeyForList(topic.Messages)
 	topic.Hash = topicHash
 	storage.Topics[index] = topic
-	
 
-	
 	topicMeta := getMeta(topic)
 	topicMetaJson, err := json.Marshal(topicMeta)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 
-	w.Header().Set("Content-Type","application/json")
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(topicMetaJson)
 }
 
-func pingSentinel() {
-	fmt.Println(sentinelPort)
-	_, err := http.Get("http://sentinel" + ":"+sentinelPort +"/newStorage/"+port)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	fmt.Println("hey, just pinged sentinel!")
+func wakeup() {
+	// url := "http://" + SentinelHost + ":" + SentinelPort + "/storages/register"
+	//_, err := http.Post(url, ContentType,)
+	//if err != nil {
+	//	log.Fatalln(err)
+	//}
+	log.Println("hey, just pinged sentinel!")
+}
+
+func init() {
+	setupVariables()
+	wakeup()
 }
 
 func main() {
-	time.Sleep(7*time.Second)
-	setupVariables()
-	pingSentinel()
+	time.Sleep(7 * time.Second)
+
 	storage = Storage{}
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/store", store)
-	log.Fatal(http.ListenAndServe(":" + port, router))
+	log.Fatal(http.ListenAndServe(":"+ServerPort, router))
 }
-
