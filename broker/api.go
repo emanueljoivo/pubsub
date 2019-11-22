@@ -2,28 +2,29 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"time"
-	"bytes"
 	"strconv"
+	"time"
 )
 
 const (
 	SentinelAddress = "localhost:5002"
-	PublisherPort = "8000"
-	SubscriberPort = "9000"
-	NetworkType   = "tcp"
-	ContentType   = "application/json"
+	PublisherPort   = "8000"
+	SubscriberPort  = "9000"
+	NetworkType     = "tcp"
+	ContentType     = "application/json"
 )
 
 var (
-	RequestError = errors.New("request could not be completed")
+	RequestError  = errors.New("request could not be completed")
 	ConnectionErr = errors.New("connection error")
 	UnmarshalErr  = errors.New("unmarshal error")
 )
@@ -41,7 +42,7 @@ type SubMessage struct {
 
 func dispatchMessage(cMsg <-chan TopicMessage) {
 	for {
-		message := <- cMsg
+		message := <-cMsg
 
 		topic := message.Topic
 
@@ -64,10 +65,10 @@ func dispatchMessage(cMsg <-chan TopicMessage) {
 	}
 }
 
-
 func handleSub(c net.Conn, cMsg chan<- SubMessage) {
 	for {
 		message, err := bufio.NewReader(c).ReadBytes('\n')
+		fmt.Println(message)
 
 		if err != nil {
 			log.Fatalln(ConnectionErr.Error() + " from sub")
@@ -81,7 +82,7 @@ func handleSub(c net.Conn, cMsg chan<- SubMessage) {
 		}
 
 		topic := msg.Topic
-		getStorageUrl := SentinelAddress + "/get/"+ topic + "?offset=" + strconv.Itoa(msg.Offset)
+		getStorageUrl := SentinelAddress + "/get/" + topic + "?offset=" + strconv.Itoa(msg.Offset)
 
 		if err != nil {
 			log.Fatal(err)
@@ -104,7 +105,6 @@ func handleSub(c net.Conn, cMsg chan<- SubMessage) {
 			log.Println(ConnectionErr)
 		}
 		_, err = c.Write(append(e, '\n'))
-		
 	}
 }
 
@@ -118,6 +118,8 @@ func handlePub(c net.Conn, cMsg chan TopicMessage) {
 
 		var msg TopicMessage
 		err = json.Unmarshal(message, &msg)
+
+		msg.CreatedAt = time.Now().Local()
 
 		if err != nil {
 			log.Println(UnmarshalErr.Error() + "from pub")
@@ -150,7 +152,7 @@ func main() {
 			}
 			go handlePub(c, cMsg)
 		}
-	} (pubMessages)
+	}(pubMessages)
 
 	subMessages := make(chan SubMessage, 100)
 	// sub
@@ -171,9 +173,9 @@ func main() {
 			}
 			handleSub(c, cMsg)
 		}
-	} (subMessages)
+	}(subMessages)
 
-	go dispatchMessage (pubMessages)
+	go dispatchMessage(pubMessages)
 
 	cJoin := make(chan os.Signal, 1)
 
