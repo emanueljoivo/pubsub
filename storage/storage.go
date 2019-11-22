@@ -22,16 +22,19 @@ const (
 	TTL int = 10 //Seconds
 	ServerPortEnvK    = "SERVER_PORT"
 	SentinelHostEnvK  = "SENTINEL_HOST"
-	DefaultSentinelHost = "http://127.0.0.1"
+	ServerAdressEnvK  = "SERVER_ADDRESS"
 	SentinelPortEnvK  = "SENTINEL_PORT"
+	IDEnvK = "ID"
+	DefaultID = "ID"
+	DefaultSentinelHost = "http://127.0.0.1"
 	DefaultSentinelPort = "8080"
 	DefaultServerPort = "8003"
 	ContentType       = "application/json"
-	ServerAdressEnvK  = "SERVER_ADDRESS"
 	DefaultServerAdress = "localhost"
 )
 
 var(
+	Id string
 	ServerAdress string
 	ServerPort string
 	SentinelPort string
@@ -90,12 +93,18 @@ func setupVariables() {
 	}
 	log.Printf("Sentinel port %s:",SentinelPort) //this could be fixed
 
-	if p, exists := os.LookupEnv(DefaultServerAdress); !exists {
+	if p, exists := os.LookupEnv(ServerAdressEnvK); !exists {
 		ServerAdress = DefaultServerAdress
 	} else {
 		ServerAdress = p
 	}
 	log.Printf("Server adress %s:",ServerAdress)
+	if p, exists := os.LookupEnv(IDEnvK); !exists {
+		Id = DefaultID
+	} else {
+		Id = p
+	}
+	log.Printf("ID : %s:",Id)
 	
 }
 func computeHashKeyForList(list [5]string) string {
@@ -197,7 +206,7 @@ func store(w http.ResponseWriter, r *http.Request) {
 // 	return meta
 // }
 func wakeup() {
-	adress := map[string]string{"Address": ServerAdress+":"+ServerPort}
+	adress := map[string]string{"Address": ServerAdress+":"+ServerPort, "ID":Id}
 	adressJson, err := json.Marshal(adress)
 	if err != nil {
 		panic(err)
