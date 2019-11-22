@@ -15,8 +15,25 @@ import (
 	"github.com/fatih/structs"
 )
 
-//STRUCTS
 
+
+const (
+	nTopics int = 3
+	nMessages int = 5
+	TTL int = 10 //Seconds
+	ServerPortEnvK    = "SERVER_PORT"
+	SentinelHostEnvK  = "SENTINEL_HOST"
+	SentinelPortEnvK    = "SENTINEL_PORT"
+	DefaultServerPort = "8082"
+	ContentType          = "application/json"
+)
+
+var ServerPort string
+var SentinelPort string
+var SentinelHost string
+
+
+//STRUCTS
 type TopicMessage struct {
 	Topic string
 	Message string
@@ -41,13 +58,6 @@ type Storage struct {
 	nTopics int
 }
 
-//VARS
-const(
-	nTopics int = 3
-	nMessages int = 5
-	timeToLive int = 10 //Seconds
-)
-
 var(
 	port string
 	sentinelPort string
@@ -56,15 +66,27 @@ var(
 
 //FUNCS
 func setupVariables() {
-	port = os.Getenv("PORT")
-	if port == "" {
-	port = "8003"
-}
-	sentinelPort = os.Getenv("SENTINEL")
-	fmt.Println(sentinelPort)
-	if sentinelPort == "" { //This dont work, i dont know why
-		sentinelPort = "8002"
+	if p, exists := os.LookupEnv(ServerPortEnvK); !exists {
+		ServerPort = DefaultServerPort
+	} else {
+		ServerPort = p
 	}
+	log.Printf("Server post %s:",ServerPort)
+	
+	if h, exists := os.LookupEnv(SentinelHostEnvK); !exists {
+		log.Fatalln("Require specify the sentinel host")
+	} else {
+		SentinelHost = h
+	}	
+	log.Printf("Sentinel host %s", SentinelHost)
+
+	if p, exists := os.LookupEnv(SentinelPortEnvK); !exists {
+		log.Fatalln("Require specify the sentinel http port")
+	} else {
+		SentinelPort = p
+	}
+	log.Printf("Sentinel port %s:",ServerPort)
+	
 }
 func computeHashKeyForList(list [5]string) string {
 	var buffer bytes.Buffer
@@ -102,13 +124,13 @@ func getTopic(topicName string) (int, Topic) {
 	if index >= nTopics {
 		index = -1
 	}
-	return index,topic
+	return index, topic
 }
 
 func storeMessage(topicMessage TopicMessage) (int,TopicMeta) {
 	topicName := topicMessage.Topic
-	index,topic := getTopic(topicName)
-	
+	index, topic := getTopic(topicName)
+
 	if index == -1 {
 		return -1, TopicMeta{}
 	}
@@ -139,7 +161,7 @@ func store(w http.ResponseWriter, r *http.Request) {
 
 	if (ans == -1) {
 		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprintf(w,"sorry, we cant create more topics ")
+		fmt.Fprintf(w, "sorry, we cant create more topics ")
 		return
 	}
 
@@ -156,9 +178,18 @@ func store(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	w.Header().Set("Content-Type","application/json")
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(topicMetaJson)
+}
+
+func wakeup() {
+	// url := "http://" + SentinelHost + ":" + SentinelPort + "/storages/register"
+	//_, err := http.Post(url, ContentType,)
+	//if err != nil {
+	//	log.Fatalln(err)
+	//}
+	log.Println("hey, just pinged sentinel!")
 }
 
 func propagate(message TopicMessage, retries int, meta TopicMeta) int { //Return an error status
@@ -188,31 +219,12 @@ func propagate(message TopicMessage, retries int, meta TopicMeta) int { //Return
 	return 1
 }
 
-func updateSentinel(meta TopicMeta) {
-	metaJson, err := json.Marshal(meta)
-	if err != nil {
-		panic(err)
-	}
-	_,err = http.Post("http://sentinel" + sentinelPort + "/topicAdress/" + meta.Topic,"application/json", bytes.NewBuffer(metaJson))
-	if err != nil {
-		panic(err)
-	}
-}
 
 func getOtherStorages(topicName string) [2]string {
 	// r, err = http.GET("http://sentinel" + sentinelPort + "/topicAdress/" + meta.Topic)
 	return [2]string{"a","b"}	
 }
 
-
-func pingSentinel() {
-	fmt.Println(sentinelPort)
-	_, err := http.Get("http://sentinel" + ":"+sentinelPort +"/newStorage/"+port)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	fmt.Println("hey, just pinged sentinel!")
-}
 
 func getTopicLastMessage(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
@@ -234,15 +246,20 @@ func getAll(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func main() {
+
+func init() {
 	setupVariables()
-	// pingSentinel()	
+	wakeup()
+}
+
+func main() {
+	time.Sleep(7 * time.Second)
+
 	storage = Storage{}
 	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/store", store).Methods("POST")
+	router.HandleFunc("/store", store)
 	router.HandleFunc("/get/{topic}", getTopicLastMessage).Methods("GET")
 	router.HandleFunc("/get", getAll).Methods("GET")
 	fmt.Println("Listening on port " + port)
-	log.Fatal(http.ListenAndServe(":" + port, router))
+	log.Fatal(http.ListenAndServe(":"+ServerPort, router))
 }
-

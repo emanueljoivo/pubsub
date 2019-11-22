@@ -1,0 +1,13 @@
+version: '3.7'
+services:
+  storage:
+    image: pubsub/storage
+    env_file:
+      - ./config.env
+    deploy:
+      replicas: 4
+      update_config:
+        parallelism: 1
+        delay: 10s
+    ports:
+      - "8003:8003"
