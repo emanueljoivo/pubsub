@@ -1,25 +1,25 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
+	"io/ioutil"
 	"log"
 	"net/http"
-	"encoding/json"
-	"github.com/gorilla/mux"
 	"strconv"
-	"bytes"
-	"io/ioutil"
 )
 
 const (
-	CREATE_NODE_URL = "/v1/catalog/register"
-	GET_NODES_URL = "/v1/catalog/nodes"
-	DELETE_NODES_URL = "/v1/catalog/deregister"
-	CONTENT_TYPE = "application/json"
+	RegisterServiceUri   = "/v1/agent/service/register"
+	DeregisterServiceUri = "v1/agent/service/deregister/:service_id"
+	ContentType          = "application/json"
 )
 
 const nTopics int = 3
 const nReplicas int = 2
+
 var sentinel Sentinel
 
 type TopicMeta struct {
@@ -39,35 +39,34 @@ type StorageMeta struct {
 }
 
 type Node struct {
-	Node string
+	Node    string
 	Address string
-	Meta map[string]string
+	Meta    map[string]string
 }
 
 type Sentinel struct {
-	Topics map[string]TopicMeta
+	Topics   map[string]TopicMeta
 	Storages map[string]StorageMeta
 }
 
 type TopicMessage struct {
-	Topic string
-	Message string
+	Topic     string
+	Message   string
 	CreatedAt int
 }
-
 
 func createStorage(w http.ResponseWriter, r *http.Request) {
 	var storage StorageMeta
 	_ = json.NewDecoder(r.Body).Decode(&storage)
 
 	fmt.Println(storage)
-	
+
 	var node Node
 	node.Address = storage.Address
 	node.Node = storage.Id
 	node.Meta = make(map[string]string)
 	for i := 0; i < storage.TopicsNumber; i++ {
-		node.Meta["topics" + strconv.Itoa(i)] = storage.Topics[i]
+		node.Meta["topics"+strconv.Itoa(i)] = storage.Topics[i]
 	}
 
 	fmt.Println(node)
@@ -86,7 +85,7 @@ func getStorage(w http.ResponseWriter, r *http.Request) {
 func deleteStorage(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
-	url := "http://localhost:8500" + DELETE_NODES_URL
+	url := "http://localhost:8500" + DeleteNodesUrl
 
 	deleteMap := make(map[string]string)
 	deleteMap["Node"] = id
@@ -118,7 +117,7 @@ func saveConsulNode(node Node) int {
 		log.Fatal(err)
 	}
 
-	url := "http://localhost:8500" + CREATE_NODE_URL
+	url := "http://localhost:8500" + CreateNodeUrl
 
 	client := &http.Client{}
 	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(requestBody))
@@ -139,7 +138,7 @@ func saveConsulNode(node Node) int {
 }
 
 func getConsulNode(field string, value string, w http.ResponseWriter) {
-	url := "http://localhost:8500" + GET_NODES_URL + "?filter=" + field + "==" + value
+	url := "http://localhost:8500" + GetNodesUrl + "?filter=" + field + "==" + value
 
 	resp, err := http.Get(url)
 
@@ -155,25 +154,41 @@ func getConsulNode(field string, value string, w http.ResponseWriter) {
 
 func get(w http.ResponseWriter, r *http.Request) {
 	sentinelJson, err := json.Marshal(sentinel)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
-	w.Header().Set("Content-Type","application/json")
+	w.Header().Set("Content-Type", ContentType)
 	w.WriteHeader(http.StatusOK)
 	w.Write(sentinelJson)
 }
 
+func registerService(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func getLeader(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func getVersion(rw http.ResponseWriter, req *http.Request) {
+	rw.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(rw).Encode(`{"version":"0.0.1"}`); err != nil {
+		log.Println(err.Error())
+	}
+}
 
 func main() {
 	sentinel = Sentinel{}
 	sentinel.Topics = make(map[string]TopicMeta)
 	sentinel.Storages = make(map[string]StorageMeta)
-	router := mux.NewRouter().StrictSlash(true)
-	// router.HandleFunc("/rebalance", store)
-	// go checkForBalance()
-	router.HandleFunc("/storages", createStorage).Methods("POST")
-	router.HandleFunc("/storages", getStorage).Methods("GET")
-	router.HandleFunc("/storages/{id}", deleteStorage).Methods("DELETE")
+	router := mux.NewRouter()
+
+	router.HandleFunc("/storages/register", registerService).Methods(http.MethodPost)
+	router.HandleFunc("/storages/leader", getLeader).Methods(http.MethodGet)
+	router.HandleFunc("/storages", createStorage).Methods(http.MethodPost)
+	router.HandleFunc("/storages", getStorage).Methods(http.MethodGet)
+	router.HandleFunc("/storages/{id}", deleteStorage).Methods(http.MethodDelete)
+	router.HandleFunc("/version", getVersion).Methods(http.MethodGet)
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
-
