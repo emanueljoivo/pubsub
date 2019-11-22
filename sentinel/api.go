@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/gorilla/mux"
 	"io/ioutil"
@@ -12,15 +13,22 @@ import (
 )
 
 const (
+	ConsulAddr = "http://localhost:8500"
 	RegisterServiceUri   = "/v1/agent/service/register"
-	DeregisterServiceUri = "v1/agent/service/deregister/:service_id"
+	DeregisterServiceUri = "/v1/agent/service/deregister/:service_id"
+	GetServiceHealthUri  = "/agent/health/service/id/:service_id"
 	ContentType          = "application/json"
+)
+
+var (
+	UnmarshalErr  = errors.New("unmarshal error")
 )
 
 const nTopics int = 3
 const nReplicas int = 2
 
-var sentinel Sentinel
+var Topics map[string]TopicMeta
+var Storages map[string]StorageMeta
 
 type TopicMeta struct {
 	Title          string
@@ -42,11 +50,6 @@ type Node struct {
 	Node    string
 	Address string
 	Meta    map[string]string
-}
-
-type Sentinel struct {
-	Topics   map[string]TopicMeta
-	Storages map[string]StorageMeta
 }
 
 type TopicMessage struct {
@@ -71,21 +74,20 @@ func createStorage(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println(node)
 
-	statusCode := saveConsulNode(node)
+	statusCode := RegisterStorage(node)
 
 	w.WriteHeader(statusCode)
 }
 
 func getStorage(w http.ResponseWriter, r *http.Request) {
-	field := r.FormValue("field")
-	value := r.FormValue("value")
-	getConsulNode(field, value, w)
+	// get a available storage service meta in consul
+	// returns to the requester
 }
 
-func deleteStorage(w http.ResponseWriter, r *http.Request) {
+func DeregisterStorage(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
-	url := "http://localhost:8500" + DeleteNodesUrl
+	url := ConsulAddr + DeregisterServiceUri
 
 	deleteMap := make(map[string]string)
 	deleteMap["Node"] = id
@@ -110,14 +112,14 @@ func deleteStorage(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func saveConsulNode(node Node) int {
+func RegisterStorage(node Node) int {
 	requestBody, err := json.Marshal(node)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	url := "http://localhost:8500" + CreateNodeUrl
+	url := ConsulAddr + RegisterServiceUri
 
 	client := &http.Client{}
 	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(requestBody))
@@ -137,33 +139,15 @@ func saveConsulNode(node Node) int {
 	return resp.StatusCode
 }
 
-func getConsulNode(field string, value string, w http.ResponseWriter) {
-	url := "http://localhost:8500" + GetNodesUrl + "?filter=" + field + "==" + value
+func RegisterService(w http.ResponseWriter, r *http.Request) {
+	var s StorageMeta
+	body, _ := ioutil.ReadAll(r.Body)
 
-	resp, err := http.Get(url)
+	err := json.Unmarshal(body, &s)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Printf(UnmarshalErr.Error())
 	}
-
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	w.Write(body)
-}
-
-func get(w http.ResponseWriter, r *http.Request) {
-	sentinelJson, err := json.Marshal(sentinel)
-	if err != nil {
-		panic(err)
-	}
-	w.Header().Set("Content-Type", ContentType)
-	w.WriteHeader(http.StatusOK)
-	w.Write(sentinelJson)
-}
-
-func registerService(w http.ResponseWriter, r *http.Request) {
-
 }
 
 func getLeader(w http.ResponseWriter, r *http.Request) {
@@ -179,16 +163,16 @@ func getVersion(rw http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	sentinel = Sentinel{}
-	sentinel.Topics = make(map[string]TopicMeta)
-	sentinel.Storages = make(map[string]StorageMeta)
+	Topics = make(map[string]TopicMeta)
+	Storages = make(map[string]StorageMeta)
+
 	router := mux.NewRouter()
 
-	router.HandleFunc("/storages/register", registerService).Methods(http.MethodPost)
+	router.HandleFunc("/storages/register", RegisterService).Methods(http.MethodPost)
 	router.HandleFunc("/storages/leader", getLeader).Methods(http.MethodGet)
 	router.HandleFunc("/storages", createStorage).Methods(http.MethodPost)
 	router.HandleFunc("/storages", getStorage).Methods(http.MethodGet)
-	router.HandleFunc("/storages/{id}", deleteStorage).Methods(http.MethodDelete)
+	router.HandleFunc("/storages/{id}", DeregisterStorage).Methods(http.MethodDelete)
 	router.HandleFunc("/version", getVersion).Methods(http.MethodGet)
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
