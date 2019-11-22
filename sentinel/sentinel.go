@@ -88,10 +88,10 @@ func GetStorage(w http.ResponseWriter, r *http.Request) {
 
 func GetStorages(w http.ResponseWriter, r *http.Request) {
 	url := ConsulAddr + GetServices
-	var sms []StorageMeta
+	var sms map[string]StorageMeta
 
 	response, err := http.Get(url)
-
+	log.Println(response)
 	if err != nil {
 		log.Println(RequestError.Error())
 	}
@@ -101,9 +101,11 @@ func GetStorages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Println(sms)
+	storesList, _ := json.Marshal(response)
+	b, err := w.Write(storesList)
 
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Println("error " + err.Error())
+	if b == 0 {
+		log.Println(RequestError.Error())
 	}
 }
 
@@ -137,7 +139,7 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := c.Do(req)
-	log.Print(resp)
+	log.Print(resp.Status)
 	defer resp.Body.Close()
 	w.WriteHeader(resp.StatusCode)
 }
