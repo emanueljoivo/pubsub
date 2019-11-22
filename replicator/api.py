@@ -4,6 +4,7 @@ import os
 from flask import Flask
 import kubernetes as kube
 from kubernetes.client.apis import core_v1_api
+import requests
 
 import random, string
 
@@ -39,12 +40,22 @@ def get_node_cluster(k8s_conf_path):
     except Exception:
         API_LOG.log("Connection with the cluster %s \
                     was not successful" % k8s_conf_path)
-                    
+
+
+
+def register_storage(address, name):
+    params = {
+        "Address": address,
+        "ID": name
+    }
+    url = "http://localhost:8080/storages/register"
+    r = requests.post(url = url, json=params)
+    print("sentinel now know about %s@%s",name,address)
+
 @app.route('/create/<int:n>')
 def index(n):
     for i in range(n):
         name = randomword(10)
-        print(name)
         core_v1 = core_v1_api.CoreV1Api()
 
         #service
@@ -61,7 +72,9 @@ def index(n):
         service = core_v1.create_namespaced_service(namespace="default", body=service_manifest)
         port = service.spec.ports[0].node_port
         ip = get_node_cluster(os.environ['KUBECONFIG'])
-        print(ip + ':' + str(port))
+        print("name=",name)
+        print("address=",ip + ':' + str(port))
+        address = ip + ':' + str(port)
         #pod
         pod_manifest = {
             "apiVersion":"v1",
@@ -82,8 +95,8 @@ def index(n):
             }]}}
 
         pod = core_v1.create_namespaced_pod(body=pod_manifest,namespace="default")
-    
-    return ip + ':' + str(port)
+    register_storage(address, name)
+    return address
 
 
 def setup():
