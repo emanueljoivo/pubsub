@@ -115,9 +115,12 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 
 	url := ConsulAddr + RegisterServiceUri
 
-	ss := StorageService{
-		Name: "storage",
-	}
+	var ss StorageService
+	ss.Name = "storage"
+	ss.Port = s.Port
+	ss.Address = s.Address
+	ss.ID = s.ID
+
 	log.Println(ss)
 
 	reqBody, err := json.Marshal(&ss)
