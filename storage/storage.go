@@ -209,7 +209,7 @@ func wakeup() {
 	if err != nil {
 		panic(err)
 	}
-	url := "http://" + SentinelHost + ":" + SentinelPort + "/storages/register"
+	url := SentinelHost + ":" + SentinelPort + "/storages/register"
 	_, err = http.Post(url, ContentType, bytes.NewBuffer(adressJson))
 	if err != nil {
 		log.Fatalln(err)
