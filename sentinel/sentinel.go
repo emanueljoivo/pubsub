@@ -17,6 +17,7 @@ const (
 	ConsulAddr = "http://127.0.0.1:8500"
 	RegisterServiceUri   = "/v1/agent/service/register"
 	DeregisterServiceUri = "/v1/agent/service/deregister/:service_id"
+	GetServices = "/v1/agent/services"
 	GetServiceHealthUri  = "/agent/health/service/id/:service_id"
 	ContentType          = "application/json"
 	charset     = "abcdefghijklmnopqrstuvwxyz" +
@@ -30,7 +31,7 @@ var (
 
 var Topics map[string]TopicMeta
 var Storages map[string]StorageMeta
-var idCounter = 0
+var storagesCounter = 0
 
 const nTopics int = 3
 const nReplicas int = 2
@@ -44,8 +45,10 @@ type TopicMeta struct {
 }
 
 type StorageMeta struct {
+	Name 		 string
 	TopicsNumber int
 	Address      string
+	Port		 int
 	Topics       [nTopics]string
 	Status       bool
 	ID           string
@@ -55,12 +58,6 @@ type Check struct {
 	HTTP string
 	Interval string
 	TTL string
-}
-
-type StorageService struct {
-	ID string
-	Name string
-	Address string
 }
 
 type TopicMessage struct {
@@ -90,35 +87,24 @@ func GetStorage(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetStorages(w http.ResponseWriter, r *http.Request) {
+	url := ConsulAddr + GetServices
+	var sms []StorageMeta
 
-}
+	response, err := http.Get(url)
 
-func DeregisterStorage(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"]
-
-	url := ConsulAddr + DeregisterServiceUri
-
-	deleteMap := make(map[string]string)
-	deleteMap["Node"] = id
-	requestBody, err := json.Marshal(deleteMap)
-
-	client := &http.Client{}
-	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(requestBody))
 	if err != nil {
-		// handle error
-		log.Fatal(err)
+		log.Println(RequestError.Error())
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		// handle error
-		log.Fatal(err)
+	if response != nil {
+		_ = json.NewDecoder(response.Body).Decode(&sms)
 	}
 
-	defer resp.Body.Close()
+	log.Println(sms)
 
-	w.WriteHeader(resp.StatusCode)
-
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Println("error " + err.Error())
+	}
 }
 
 func RegisterService(w http.ResponseWriter, r *http.Request) {
@@ -127,15 +113,18 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 
 	url := ConsulAddr + RegisterServiceUri
 
-	ss := make(map[string]string)
-
+	var ss StorageMeta
 	var absoluteAddr = s["Address"]
 	l := strings.Split(absoluteAddr, ":")
-	ss["Address"] = l[0]
-	ss["Name"] = generateStorageName(10)
-	ss["Port"] = l[1]
-	ss["ID"] = strconv.Itoa(idCounter)
-	idCounter++
+
+	ss.Address = l[0]
+	ss.Port, _ = strconv.Atoi(l[1])
+	ss.Name = "storage_" + strconv.Itoa(storagesCounter)
+	ss.ID =  s["ID"]
+
+	storagesCounter++
+
+	Storages[ss.ID] = ss
 
 	log.Print(ss)
 	bd, _ := json.Marshal(ss)
@@ -143,7 +132,6 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 	c := &http.Client{}
 	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(bd))
 
-	log.Print(url)
 	if err != nil {
 		log.Println(RequestError.Error())
 	}
@@ -177,10 +165,42 @@ func main() {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/storages/register", RegisterService).Methods(http.MethodPost)
+
 	router.HandleFunc("/storages/leader", Leader).Methods(http.MethodGet)
 	router.HandleFunc("/storage", GetStorage).Methods(http.MethodGet)
 	router.HandleFunc("/storages", GetStorages).Methods(http.MethodGet)
+
 	router.HandleFunc("/storages/{id}", DeregisterStorage).Methods(http.MethodDelete)
+
 	router.HandleFunc("/version", Version).Methods(http.MethodGet)
 	log.Fatal(http.ListenAndServe(":8080", router))
+}
+
+
+func DeregisterStorage(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	url := ConsulAddr + DeregisterServiceUri
+
+	deleteMap := make(map[string]string)
+	deleteMap["Node"] = id
+	requestBody, err := json.Marshal(deleteMap)
+
+	client := &http.Client{}
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		// handle error
+		log.Fatal(err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		// handle error
+		log.Fatal(err)
+	}
+
+	defer resp.Body.Close()
+
+	w.WriteHeader(resp.StatusCode)
+
 }
