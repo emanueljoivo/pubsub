@@ -10,14 +10,17 @@ import (
 	"net/http"
 	// "time"
 	"os"
-	"time"
+	// "../structs"
+	"strconv"
+	"github.com/fatih/structs"
 )
 
-const nTopics int = 3
-const nMessages int = 5
-const TTL int = 10 //Seconds
+
 
 const (
+	nTopics int = 3
+	nMessages int = 5
+	TTL int = 10 //Seconds
 	ServerPortEnvK    = "SERVER_PORT"
 	SentinelHostEnvK  = "SENTINEL_HOST"
 	SentinelPortEnvK    = "SENTINEL_PORT"
@@ -29,6 +32,39 @@ var ServerPort string
 var SentinelPort string
 var SentinelHost string
 
+
+//STRUCTS
+type TopicMessage struct {
+	Topic string
+	Message string
+	CreatedAt int
+}
+
+type Topic struct {
+	Messages [nMessages]string //Last message is the newest
+	Topic string
+	LastMessageAt int
+	Hash string
+}
+
+type TopicMeta struct {
+	Topic string
+	Hash string
+	LastMessageAt int
+}
+
+type Storage struct {
+	Topics [nTopics]Topic
+	nTopics int
+}
+
+var(
+	port string
+	sentinelPort string
+	storage Storage
+)
+
+//FUNCS
 func setupVariables() {
 	if p, exists := os.LookupEnv(ServerPortEnvK); !exists {
 		ServerPort = DefaultServerPort
@@ -65,49 +101,23 @@ func computeHashKeyForList(list [5]string) string {
 func getMeta(topic Topic) TopicMeta {
 	meta := TopicMeta{}
 	meta.Hash = topic.Hash
-	meta.Title = topic.Title
+	meta.Topic = topic.Topic
 	meta.LastMessageAt = topic.LastMessageAt
 	return meta
 }
 
-type TopicMessage struct {
-	Topic     string
-	Message   string
-	CreatedAt int
-}
-
-type Topic struct {
-	Messages      [nMessages]string //Last message is the newest
-	Title         string
-	LastMessageAt int
-	Hash          string
-}
-
-type TopicMeta struct {
-	Title         string
-	Hash          string
-	LastMessageAt int
-}
-
-type Storage struct {
-	Topics  [nTopics]Topic
-	nTopics int
-}
-
-var storage Storage
-
 func getTopic(topicName string) (int, Topic) {
 	index := -1
 	var topic Topic
-	for i, storageTopic := range storage.Topics {
-		if storageTopic.Title == topicName {
+	topic.LastMessageAt = -1
+	for i , storageTopic := range storage.Topics {
+		if storageTopic.Topic == topicName {
 			topic = storageTopic
-			fmt.Println("HEY U ALREADY HAVE ONE")
 			index = i
 		}
 	}
 	if index == -1 {
-		topic.Title = topicName
+		topic.Topic = topicName
 		index = storage.nTopics
 		storage.nTopics++
 	}
@@ -117,36 +127,53 @@ func getTopic(topicName string) (int, Topic) {
 	return index, topic
 }
 
-func store(w http.ResponseWriter, r *http.Request) {
-	topicMessage := TopicMessage{}
-
-	err := json.NewDecoder(r.Body).Decode(&topicMessage)
-	if err != nil {
-		panic(err)
-	}
+func storeMessage(topicMessage TopicMessage) (int,TopicMeta) {
 	topicName := topicMessage.Topic
 	index, topic := getTopic(topicName)
 
 	if index == -1 {
+		return -1, TopicMeta{}
+	}
+	if topic.LastMessageAt != topicMessage.CreatedAt {
+		// Shifting the message queue
+		// There must be a better way of doing this. From here
+		var slice []string
+		slice = append(topic.Messages[1:5],topicMessage.Message)
+		copy(topic.Messages[:], slice[0:5])
+		// to here.
+
+		topic.LastMessageAt = topicMessage.CreatedAt
+		topicHash := computeHashKeyForList(topic.Messages)
+		topic.Hash = topicHash
+		storage.Topics[index] = topic
+	}
+	return 1, getMeta(topic)
+}
+func store(w http.ResponseWriter, r *http.Request) {
+
+	var result map[string]string
+
+	_ = json.NewDecoder(r.Body).Decode(&result)
+	createdAt, _ := strconv.Atoi(result["CreatedAt"])
+	// leader, _ := strconv.ParseBool(result["Leader"])
+	topicMessage := TopicMessage{result["Topic"], result["Message"], createdAt}
+	ans, meta := storeMessage(topicMessage)
+
+	if (ans == -1) {
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprintf(w, "sorry, we cant create more topics ")
 		return
 	}
 
-	// Shifting the message queue
-	// There must be a better way of doing this. From here
-	var slice []string
-	slice = append(topic.Messages[1:5], topicMessage.Message)
-	copy(topic.Messages[:], slice[0:5])
-	// to here.
+	// // if !leader {
+	// 	propagate(topicMessage)
+	// 	//treat error
+	// // }
 
-	topic.LastMessageAt = topicMessage.CreatedAt
-	topicHash := computeHashKeyForList(topic.Messages)
-	topic.Hash = topicHash
-	storage.Topics[index] = topic
+	// updateSentinel(meta)
+	//treat error
 
-	topicMeta := getMeta(topic)
-	topicMetaJson, err := json.Marshal(topicMeta)
+	topicMetaJson, err := json.Marshal(meta)
 	if err != nil {
 		panic(err)
 	}
@@ -165,6 +192,61 @@ func wakeup() {
 	log.Println("hey, just pinged sentinel!")
 }
 
+func propagate(message TopicMessage, retries int, meta TopicMeta) int { //Return an error status
+	adresses := getOtherStorages(message.Topic)
+	data := structs.Map(message)
+	data["Leader"] = "1"
+	messageJson, err := json.Marshal(data)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, adress := range adresses {
+		r , err := http.Post("http://" + adress + "/store/" + message.Topic,"application/json", bytes.NewBuffer(messageJson))
+		if err != nil {
+			log.Fatalln(err) //Treat error
+		}
+
+		var result map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&result)
+		lastMessageAt, _ := strconv.Atoi(result["LastMessageAt"])
+		hash := result["Hash"]
+		if (lastMessageAt != meta.LastMessageAt && hash != meta.Hash) {
+			//ERROR
+			return -1
+		}
+	}
+	return 1
+}
+
+
+func getOtherStorages(topicName string) [2]string {
+	// r, err = http.GET("http://sentinel" + sentinelPort + "/topicAdress/" + meta.Topic)
+	return [2]string{"a","b"}	
+}
+
+
+func getTopicLastMessage(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	topicName := params["topic"]
+	_,topic := getTopic(topicName)
+	lastMessage := topic.Messages[nMessages - 1]
+	fmt.Fprintf(w,lastMessage)
+}
+
+func getAll(w http.ResponseWriter, r *http.Request) {
+	storageJson, err := json.Marshal(storage)
+	if err != nil {
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type","application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(storageJson)
+
+}
+
+
 func init() {
 	setupVariables()
 	wakeup()
@@ -176,5 +258,8 @@ func main() {
 	storage = Storage{}
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/store", store)
+	router.HandleFunc("/get/{topic}", getTopicLastMessage).Methods("GET")
+	router.HandleFunc("/get", getAll).Methods("GET")
+	fmt.Println("Listening on port " + port)
 	log.Fatal(http.ListenAndServe(":"+ServerPort, router))
 }

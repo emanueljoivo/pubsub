@@ -1,5 +1,8 @@
 FROM golang as build-stage
 
+RUN go get -u github.com/gorilla/mux
+RUN go get github.com/fatih/structs
+
 WORKDIR /build
 
 COPY storage.go /build/storage.go
