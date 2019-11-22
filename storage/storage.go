@@ -197,8 +197,7 @@ func store(w http.ResponseWriter, r *http.Request) {
 // 	return meta
 // }
 func wakeup() {
-	adress := map[string]string{"Address": ServerAdress,
-								"Port": ServerPort}
+	adress := map[string]string{"Address": ServerAdress+":"+ServerPort}
 	adressJson, err := json.Marshal(adress)
 	if err != nil {
 		panic(err)
