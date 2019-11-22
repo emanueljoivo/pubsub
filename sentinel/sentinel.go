@@ -6,22 +6,19 @@ import (
 	"errors"
 	"github.com/gorilla/mux"
 	"log"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 )
 
 const (
-	ConsulAddr = "http://127.0.0.1:8500"
+	ConsulAddr           = "http://127.0.0.1:8500"
 	RegisterServiceUri   = "/v1/agent/service/register"
-	DeregisterServiceUri = "/v1/agent/service/deregister/:service_id"
-	GetServices = "/v1/agent/services"
-	GetServiceHealthUri  = "/agent/health/service/id/:service_id"
+	DeregisterServiceUri = "/v1/agent/service/deregister/"
+	GetServices          = "/v1/agent/services"
+	GetService			 = "/agent/service/"
+	GetServiceHealthUri  = "/agent/health/service/id/"
 	ContentType          = "application/json"
-	charset     = "abcdefghijklmnopqrstuvwxyz" +
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
 var (
@@ -66,24 +63,32 @@ type TopicMessage struct {
 	CreatedAt int
 }
 
-func stringWithCharset(length int, charset string) string {
-	var seededRand = rand.New(
-		rand.NewSource(time.Now().UnixNano()))
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = charset[seededRand.Intn(len(charset))]
-	}
-	return string(b)
-}
-
-func generateStorageName(length int) string {
-	return stringWithCharset(length, charset)
-}
-
-
 func GetStorage(w http.ResponseWriter, r *http.Request) {
-	// get a available storage service meta in consul
-	// returns to the requester
+	topicName := r.FormValue("topicName")
+	log.Printf("Querying %s", topicName)
+
+	url := ConsulAddr + GetService + topicName
+
+	var sm StorageMeta
+
+	response, err := http.Get(url)
+	log.Println("responde " + response.Status)
+	if err != nil {
+		log.Println(RequestError.Error())
+	}
+
+	if response != nil {
+		_ = json.NewDecoder(response.Body).Decode(&sm)
+	}
+
+	log.Println(sm)
+	storageMeta, _ := json.Marshal(response)
+	b, err := w.Write(storageMeta)
+
+	if b == 0 {
+		log.Println(RequestError.Error())
+	}
+
 }
 
 func GetStorages(w http.ResponseWriter, r *http.Request) {
@@ -126,7 +131,7 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 
 	storagesCounter++
 
-	Storages[ss.ID] = ss
+	Storages[ss.Name] = ss
 
 	log.Print(ss)
 	bd, _ := json.Marshal(ss)
@@ -139,7 +144,7 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := c.Do(req)
-	log.Print(resp.Status)
+	log.Println(resp.Status)
 	defer resp.Body.Close()
 	w.WriteHeader(resp.StatusCode)
 }
