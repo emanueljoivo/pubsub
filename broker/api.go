@@ -82,7 +82,7 @@ func handleSub(c net.Conn, cMsg chan<- SubMessage) {
 		}
 
 		topic := msg.Topic
-		getStorageUrl := SentinelAddress + "/get/" + topic + "?offset=" + strconv.Itoa(msg.Offset)
+		getStorageUrl := SentinelAddress + "/storages?topicName=" + topic 
 
 		if err != nil {
 			log.Fatal(err)
@@ -93,7 +93,7 @@ func handleSub(c net.Conn, cMsg chan<- SubMessage) {
 		storageData := make(map[string]string)
 		json.NewDecoder(resp.Body).Decode(&storageData)
 
-		getTopicMessagesEndpoint := storageData["address"] + "/topics/" + topic
+		getTopicMessagesEndpoint := storageData["address"] + "/get/" + topic + "?offset=" + msg.Offset
 		response, err := http.Get(getTopicMessagesEndpoint)
 
 		topicMessages := make(map[string]string)
