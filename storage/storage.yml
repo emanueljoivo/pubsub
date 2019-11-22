@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-deploy
+  labels:
+    app: storage
+spec:
+  containers:
+  - name: storage 
+    image: ignacioschmid/pubsub:storage
+    ports:
+    - containerPort: 8003
+    env:
+    - name: SENTINEL
+      value: "8000"
