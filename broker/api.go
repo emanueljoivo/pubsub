@@ -82,7 +82,7 @@ func handleSub(c net.Conn, cMsg chan<- SubMessage) {
 		}
 
 		topic := msg.Topic
-		getStorageUrl := SentinelAddress + "/storages?topicName=" + topic 
+		getStorageUrl := SentinelAddress + "/storage?topicName=" + topic 
 
 		if err != nil {
 			log.Fatal(err)
