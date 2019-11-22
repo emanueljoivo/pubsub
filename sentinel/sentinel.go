@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/gorilla/mux"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"strconv"
 )
 
 const (
@@ -22,13 +20,14 @@ const (
 
 var (
 	UnmarshalErr  = errors.New("unmarshal error")
+	RequestError = errors.New("request could not be completed")
 )
-
-const nTopics int = 3
-const nReplicas int = 2
 
 var Topics map[string]TopicMeta
 var Storages map[string]StorageMeta
+
+const nTopics int = 3
+const nReplicas int = 2
 
 type TopicMeta struct {
 	Title          string
@@ -41,15 +40,26 @@ type TopicMeta struct {
 type StorageMeta struct {
 	TopicsNumber int
 	Address      string
+	Port		string
 	Topics       [nTopics]string
 	Status       bool
-	Id           string
+	ID           string
 }
 
-type Node struct {
-	Node    string
+type Check struct {
+	HTTP string
+	Interval string
+	TTL string
+}
+
+type StorageService struct {
+	ID string
+	Name string
+	Tags [3]string
 	Address string
-	Meta    map[string]string
+	Port string
+	Meta TopicMeta
+	Check Check
 }
 
 type TopicMessage struct {
@@ -58,30 +68,13 @@ type TopicMessage struct {
 	CreatedAt int
 }
 
-func createStorage(w http.ResponseWriter, r *http.Request) {
-	var storage StorageMeta
-	_ = json.NewDecoder(r.Body).Decode(&storage)
-
-	fmt.Println(storage)
-
-	var node Node
-	node.Address = storage.Address
-	node.Node = storage.Id
-	node.Meta = make(map[string]string)
-	for i := 0; i < storage.TopicsNumber; i++ {
-		node.Meta["topics"+strconv.Itoa(i)] = storage.Topics[i]
-	}
-
-	fmt.Println(node)
-
-	statusCode := RegisterStorage(node)
-
-	w.WriteHeader(statusCode)
-}
-
-func getStorage(w http.ResponseWriter, r *http.Request) {
+func GetStorage(w http.ResponseWriter, r *http.Request) {
 	// get a available storage service meta in consul
 	// returns to the requester
+}
+
+func GetStorages(w http.ResponseWriter, r *http.Request) {
+
 }
 
 func DeregisterStorage(w http.ResponseWriter, r *http.Request) {
@@ -112,8 +105,8 @@ func DeregisterStorage(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func RegisterStorage(node Node) int {
-	requestBody, err := json.Marshal(node)
+func RegisterStorage(storageMeta StorageMeta) int {
+	requestBody, err := json.Marshal(storageMeta)
 
 	if err != nil {
 		log.Fatal(err)
@@ -148,13 +141,47 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf(UnmarshalErr.Error())
 	}
+
+	url := ConsulAddr + RegisterServiceUri
+
+	ss := &StorageService{
+		ID: s.ID,
+		Name: "storage",
+		Tags: s.Topics,
+		Address: s.Address,
+		Port: s.Port,
+		Check: Check{
+			HTTP: "http://localhost:5000/health",
+			Interval:"10s",
+			TTL: "15s",
+		},
+	}
+
+	reqBody, err := json.Marshal(ss)
+
+	log.Print(reqBody)
+	c := &http.Client{}
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(reqBody))
+
+	if err != nil {
+		log.Println(RequestError.Error())
+	}
+
+	resp, err := c.Do(req)
+
+	defer resp.Body.Close()
+	w.WriteHeader(resp.StatusCode)
 }
 
-func getLeader(w http.ResponseWriter, r *http.Request) {
+func Leader(rw http.ResponseWriter, req *http.Request) {
+	topicName := req.FormValue("topicName")
+	log.Printf("Querying %s leader", topicName)
 
+	// search/elect leader
+	// retrieves leader
 }
 
-func getVersion(rw http.ResponseWriter, req *http.Request) {
+func Version(rw http.ResponseWriter, req *http.Request) {
 	rw.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(rw).Encode(`{"version":"0.0.1"}`); err != nil {
@@ -165,14 +192,14 @@ func getVersion(rw http.ResponseWriter, req *http.Request) {
 func main() {
 	Topics = make(map[string]TopicMeta)
 	Storages = make(map[string]StorageMeta)
-
+	log.Print("Sentinel starting\n")
 	router := mux.NewRouter()
 
 	router.HandleFunc("/storages/register", RegisterService).Methods(http.MethodPost)
-	router.HandleFunc("/storages/leader", getLeader).Methods(http.MethodGet)
-	router.HandleFunc("/storages", createStorage).Methods(http.MethodPost)
-	router.HandleFunc("/storages", getStorage).Methods(http.MethodGet)
+	router.HandleFunc("/storages/leader", Leader).Methods(http.MethodGet)
+	router.HandleFunc("/storage", GetStorage).Methods(http.MethodGet)
+	router.HandleFunc("/storages", GetStorages).Methods(http.MethodGet)
 	router.HandleFunc("/storages/{id}", DeregisterStorage).Methods(http.MethodDelete)
-	router.HandleFunc("/version", getVersion).Methods(http.MethodGet)
+	router.HandleFunc("/version", Version).Methods(http.MethodGet)
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
