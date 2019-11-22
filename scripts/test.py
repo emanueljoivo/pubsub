@@ -1,6 +1,6 @@
 import requests
 import time
-URL = "localhost:8003/store"
+URL = "http://localhost:8003/store"
 count = 0
 
 #light message
@@ -14,9 +14,10 @@ for i in range(3):
             "Message": message,
             "CreatedAt": str(count)
         }
-        r = requests.post(url = URL, params =params)
+        r = requests.post(url = URL, json=params)
 
-time.sleep(15)
+print("light messages sent")
+time.sleep(10)
 #medium message
 for i in range(3):
     topic = "topic-"+str(i)
@@ -28,9 +29,10 @@ for i in range(3):
             "Message": message,
             "CreatedAt": str(count)
         }
-        r = requests.post(url = URL, params =params)
+        r = requests.post(url = URL, json=params)
         
-time.sleep(15)
+print("medium messages sent")
+time.sleep(10)
 #heavy message
 for i in range(3):
     topic = "topic-"+str(i)
@@ -42,4 +44,5 @@ for i in range(3):
             "Message": message,
             "CreatedAt": str(count)
         }
-        r = requests.post(url = URL, params =params)
+        r = requests.post(url = URL, json=params)
+print("heavy messages sent")
