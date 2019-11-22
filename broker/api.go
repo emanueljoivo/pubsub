@@ -54,7 +54,7 @@ func dispatchMessage(cMsg <-chan TopicMessage) {
 			storageData := make(map[string]string)
 			json.NewDecoder(resp.Body).Decode(&storageData)
 
-			storeEndpoint := storageData["address"] + "/store"
+			storeEndpoint := storageData["Address"] + "/store"
 			requestBody, err := json.Marshal(message)
 			_, err = http.Post(storeEndpoint, ContentType, bytes.NewBuffer(requestBody))
 
@@ -93,13 +93,13 @@ func handleSub(c net.Conn, cMsg chan<- SubMessage) {
 		storageData := make(map[string]string)
 		json.NewDecoder(resp.Body).Decode(&storageData)
 
-		getTopicMessagesEndpoint := storageData["address"] + "/get/" + topic + "?offset=" + msg.Offset
+		getTopicMessagesEndpoint := storageData["Address"] + "/get/" + topic + "?offset=" + msg.Offset
 		response, err := http.Get(getTopicMessagesEndpoint)
 
 		topicMessages := make(map[string]string)
 		json.NewDecoder(response.Body).Decode(&storageData)
 
-		e, err := json.Marshal(topicMessages["messages"])
+		e, err := json.Marshal(topicMessages["Messages"])
 
 		if err != nil {
 			log.Println(ConnectionErr)
