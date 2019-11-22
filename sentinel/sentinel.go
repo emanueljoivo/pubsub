@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	ConsulAddr = "http://localhost:8500"
+	ConsulAddr = "http://127.0.0.1:8500"
 	RegisterServiceUri   = "/v1/agent/service/register"
 	DeregisterServiceUri = "/v1/agent/service/deregister/:service_id"
 	GetServiceHealthUri  = "/agent/health/service/id/:service_id"
@@ -55,11 +55,8 @@ type Check struct {
 type StorageService struct {
 	ID string
 	Name string
-	Tags [3]string
 	Address string
 	Port string
-	Meta TopicMeta
-	Check Check
 }
 
 type TopicMessage struct {
@@ -105,35 +102,9 @@ func DeregisterStorage(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func RegisterStorage(storageMeta StorageMeta) int {
-	requestBody, err := json.Marshal(storageMeta)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	url := ConsulAddr + RegisterServiceUri
-
-	client := &http.Client{}
-	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(requestBody))
-	if err != nil {
-		// handle error
-		log.Fatal(err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		// handle error
-		log.Fatal(err)
-	}
-
-	defer resp.Body.Close()
-
-	return resp.StatusCode
-}
-
 func RegisterService(w http.ResponseWriter, r *http.Request) {
 	var s StorageMeta
+	log.Println(s)
 	body, _ := ioutil.ReadAll(r.Body)
 
 	err := json.Unmarshal(body, &s)
@@ -144,20 +115,12 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 
 	url := ConsulAddr + RegisterServiceUri
 
-	ss := &StorageService{
-		ID: s.ID,
+	ss := StorageService{
 		Name: "storage",
-		Tags: s.Topics,
-		Address: s.Address,
-		Port: s.Port,
-		Check: Check{
-			HTTP: "http://localhost:5000/health",
-			Interval:"10s",
-			TTL: "15s",
-		},
 	}
+	log.Println(ss)
 
-	reqBody, err := json.Marshal(ss)
+	reqBody, err := json.Marshal(&ss)
 
 	c := &http.Client{}
 	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(reqBody))
@@ -167,7 +130,7 @@ func RegisterService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := c.Do(req)
-	log.Print(resp.StatusCode)
+	log.Print(resp)
 	defer resp.Body.Close()
 	w.WriteHeader(resp.StatusCode)
 }
