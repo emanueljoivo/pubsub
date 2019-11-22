@@ -50,8 +50,10 @@ def index(n):
                     {"name":name,
                      "image":"ignacioschmid/pubsub:storage",
                      "ports":[{"containerPort":8003}],
-                     "env":[{"name":"SENTINEL","value":"8000"},
-                            {"name":"ADRESS","value":ip},
+                     "env":[{"name":"SENTINEL_HOST","value":"http://127.0.0.1"},
+                            {"name":"SENTINEL_PORT","value":"8080"},
+                            {"name":"SERVER_ADRESS","value":ip},
+                            {"name":"SERVER_PORT","value":"8003"},
                             {"name":"ID","value":name}]
             }]}}
 

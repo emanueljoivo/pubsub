@@ -16,22 +16,30 @@ import (
 )
 
 
-
 const (
 	nTopics int = 3
 	nMessages int = 5
 	TTL int = 10 //Seconds
 	ServerPortEnvK    = "SERVER_PORT"
 	SentinelHostEnvK  = "SENTINEL_HOST"
-	SentinelPortEnvK    = "SENTINEL_PORT"
-	DefaultServerPort = "8082"
-	ContentType          = "application/json"
+	DefaultSentinelHost = "http://127.0.0.1"
+	SentinelPortEnvK  = "SENTINEL_PORT"
+	DefaultSentinelPort = "8080"
+	DefaultServerPort = "8003"
+	ContentType       = "application/json"
+	ServerAdressEnvK  = "SERVER_ADRESS"
+	DefaultServerAdress = "localhost"
 )
 
-var ServerPort string
-var SentinelPort string
-var SentinelHost string
-
+var(
+	ServerAdress string
+	ServerPort string
+	SentinelPort string
+	SentinelHost string
+	port string
+	sentinelPort string
+	storage Storage
+)
 
 //STRUCTS
 type TopicMessage struct {
@@ -58,11 +66,6 @@ type Storage struct {
 	nTopics int
 }
 
-var(
-	port string
-	sentinelPort string
-	storage Storage
-)
 
 //FUNCS
 func setupVariables() {
@@ -74,18 +77,25 @@ func setupVariables() {
 	log.Printf("Server post %s:",ServerPort)
 	
 	if h, exists := os.LookupEnv(SentinelHostEnvK); !exists {
-		log.Fatalln("Require specify the sentinel host")
+		SentinelHost = DefaultSentinelPort
 	} else {
 		SentinelHost = h
 	}	
 	log.Printf("Sentinel host %s", SentinelHost)
 
 	if p, exists := os.LookupEnv(SentinelPortEnvK); !exists {
-		log.Fatalln("Require specify the sentinel http port")
+		SentinelPort = DefaultSentinelPort
 	} else {
 		SentinelPort = p
 	}
-	log.Printf("Sentinel port %s:",ServerPort)
+	log.Printf("Sentinel port %s:",SentinelPort) //this could be fixed
+
+	if p, exists := os.LookupEnv(DefaultServerAdress); !exists {
+		ServerAdress = DefaultServerAdress
+	} else {
+		ServerAdress = p
+	}
+	log.Printf("Server adress %s:",ServerAdress)
 	
 }
 func computeHashKeyForList(list [5]string) string {
@@ -184,11 +194,17 @@ func store(w http.ResponseWriter, r *http.Request) {
 }
 
 func wakeup() {
-	// url := "http://" + SentinelHost + ":" + SentinelPort + "/storages/register"
-	//_, err := http.Post(url, ContentType,)
-	//if err != nil {
-	//	log.Fatalln(err)
-	//}
+	adress := map[string]string{"Address": ServerAdress,
+								"Port": ServerPort}
+	adressJson, err := json.Marshal(adress)
+	if err != nil {
+		panic(err)
+	}
+	url := "http://" + SentinelHost + ":" + SentinelPort + "/storages/register"
+	_, err = http.Post(url, ContentType, bytes.NewBuffer(adressJson))
+	if err != nil {
+		log.Fatalln(err)
+	}
 	log.Println("hey, just pinged sentinel!")
 }
 
@@ -253,8 +269,6 @@ func init() {
 }
 
 func main() {
-	time.Sleep(7 * time.Second)
-
 	storage = Storage{}
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/store", store)
